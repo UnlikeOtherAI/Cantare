@@ -64,7 +64,7 @@ export function CameraPanel() {
   const setUi = useUi((s) => s.set);
   return (
     <>
-      <Group title="Quick angles" hint="Drag the stage to orbit">
+      <Group title="Quick angles" hint="Right-drag or two fingers to orbit">
         <div className="tiles tiles--4" role="radiogroup" aria-label="Quick angles">
           {ANGLES.map((a) => (
             <button key={a.value} type="button" role="radio" aria-label={a.label === "¾" ? "Three-quarter" : a.label} aria-checked={angle === a.value} className={`tile${angle === a.value ? " is-active" : ""}`} onClick={() => goToAngle(a.value)}>

@@ -266,6 +266,8 @@ export class CanStage {
     this.renderer.setSize(width, height, false);
     this.composer.setSize(width, height);
     this.camera.aspect = width / height;
+    // Keep the rings around the can on small stages (phones) as well as large ones.
+    this.gizmo.size = 2.1 * Math.min(1, Math.min(width, height) / 760);
     this.applyViewOffset();
     this.refreshBackground();
     if (this.autoFrame && this.built) this.setCameraPreset(this.autoFrame, false);

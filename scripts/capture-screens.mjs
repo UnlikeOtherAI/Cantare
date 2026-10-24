@@ -74,8 +74,10 @@ for (const device of Object.keys(DEVICES)) {
     await page.getByRole("button", { name: "Done" }).click();
     await scene(page, { tool: "artwork", editor: { body: { preset: "silver", finish: "gloss" }, lid: { preset: "silver", finish: "brushed" } } });
     await shot(page, device, "artwork-printed");
-    await scene(page, { art: false, tool: "artwork", editor: { artwork: { mode: "label" } } });
+    await scene(page, { art: false, tool: "artwork", editor: { artwork: { mode: "label", top: null, bottom: null, fit: "auto" } } });
     await shot(page, device, "artwork-label");
+    await scene(page, { art: false, tool: "artwork", editor: { artwork: { mode: "sticker", top: null, bottom: null, fit: "auto" } } });
+    await shot(page, device, "artwork-sticker");
   }
 
   await scene(page, { art: false, tool: "light", editor: { artwork: { mode: "printed" } } });
@@ -92,6 +94,9 @@ for (const device of Object.keys(DEVICES)) {
   if (all) {
     await scene(page, { art: false, tool: "camera", editor: { water: { density: 0.3, size: 0.35, runs: 0.2, haze: 0.15, tool: "none" } } });
     await shot(page, device, "camera");
+    await scene(page, { art: false, tool: "camera", editor: { tilt: { pitch: -22, roll: 14 }, spin: 30 } });
+    await shot(page, device, "camera-tilted");
+    await scene(page, { art: false, tool: "camera", editor: { tilt: { pitch: 0, roll: 0 }, spin: 0 } });
     await scene(page, { art: false, tool: "effects", editor: { effects: { ...(await page.evaluate(() => window.__editor.getState().settings.effects)), dofEnabled: true, aperture: 2, reflection: 0.4 } } });
     await shot(page, device, "effects");
 
@@ -134,6 +139,30 @@ for (const device of Object.keys(DEVICES)) {
     await page.locator(".render").first().waitFor();
     await settle(page, 800);
     await shot(page, device, "gallery");
+
+    // Saved setups: the scene menu, saving, and the list.
+    await page.evaluate(() => window.__ui.getState().set({ dialog: null }));
+    await settle(page, 400);
+    await page.locator(".topbar__centre button").first().click();
+    await settle(page, 400);
+    await shot(page, device, "scene-menu");
+    await page.getByRole("menuitem", { name: /Save setup/ }).click();
+    await settle(page, 1500);
+    await shot(page, device, "setup-save");
+    const name = page.getByRole("dialog").getByRole("textbox").first();
+    await name.fill("Hopwell · bar");
+    await name.press("Enter");
+    await settle(page, 1200);
+    await page.evaluate(() => window.__ui.getState().set({ dialog: "setups" }));
+    await settle(page, 1200);
+    await shot(page, device, "setups");
+    await page.evaluate(() => window.__ui.getState().set({ dialog: null }));
+
+    // Photoreal export settings (last: its background warm-up is heavy without a GPU).
+    await page.evaluate(() => window.__ui.getState().set({ dialog: "export" }));
+    await page.getByRole("radio", { name: "Photoreal" }).click();
+    await settle(page, 1200);
+    await shot(page, device, "export-photoreal");
   }
   await context.close();
 
