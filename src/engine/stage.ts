@@ -12,8 +12,8 @@ import { lidNormalMap, rivetGeometry, tabGeometry } from "./lidDetail";
 import { applySurface, finishValues, surfaceSpec } from "./materials";
 import { arcAtHeight, arcLengths, buildProfiles, type CanProfiles } from "./profile";
 import type { CameraPreset, CanSettings } from "./settings";
-import { captureEnvironment, compositeAndFinish, pathTrace } from "./finalRender";
-import { heightToNormal, loadImage } from "./textures";
+import { captureEnvironment, compositeAndFinish, disposeTracer, pathTrace, type TraceStage } from "./finalRender";
+import { loadImage } from "./textures";
 
 export interface StageInfo {
   format: CanFormat;
@@ -40,6 +40,7 @@ export interface FinalRenderOptions extends ExportOptions {
   /** Path-tracing samples per pixel: more is cleaner and slower. */
   samples: number;
   onProgress?(samples: number, total: number): void;
+  onStage?(stage: TraceStage): void;
   signal?: AbortSignal;
 }
 
@@ -475,9 +476,11 @@ export class CanStage {
     const background = this.scene.background;
     const helper = this.gizmo.getHelper();
     const gizmoVisible = helper.visible;
-    const dropBump = this.dropMaterial.bumpMap;
-    const dropNormal = this.dropMaterial.normalMap;
     const parent = this.spinGroup.parent;
+    const waterShells = this.canGroup.children.filter((c) => {
+      const material = (c as THREE.Mesh).material;
+      return material === this.dropMaterial || material === this.hazeMaterial;
+    });
     const disposables: { dispose(): void }[] = [];
 
     try {
@@ -505,6 +508,11 @@ export class CanStage {
       this.renderer.render(this.scene, this.camera);
       this.renderer.setRenderTarget(null);
 
+      // Water stays raster: path tracing tiny refractive beads needs thousands of samples
+      // to resolve their caustics. The plate's water is blended back in through a mask.
+      const mask = this.renderWaterMask(width, height);
+      if (mask) disposables.push(mask);
+
       // 2. The can alone, path traced in the same light. The floor is matte: invisible
       // to the camera but there for bounce light and for the can to reflect.
       const traceScene = new THREE.Scene();
@@ -528,15 +536,7 @@ export class CanStage {
       traceScene.environmentRotation.copy(this.scene.environmentRotation);
       traceScene.background = null;
 
-      // The tracer has no bump maps: give the droplets a real normal map.
-      if (this.droplets) {
-        const pixel = (Math.PI * this.format.bodyDiameter) / this.droplets.height.width;
-        const normal = heightToNormal(this.droplets.height, 2 / (8 * pixel), true);
-        disposables.push(normal);
-        this.dropMaterial.bumpMap = null;
-        this.dropMaterial.normalMap = normal;
-        this.dropMaterial.needsUpdate = true;
-      }
+      for (const shell of waterShells) this.canGroup.remove(shell);
 
       const fx = settings.effects;
       const tracer = await pathTrace(this.renderer, traceScene, this.camera, {
@@ -544,20 +544,18 @@ export class CanStage {
         fStop: fx.dofEnabled ? fx.aperture : null,
         focusDistance: this.camera.position.distanceTo(this.dof.target ?? this.spinGroup.position),
         onProgress: options.onProgress,
+        onStage: options.onStage,
         signal: options.signal
       });
-      disposables.push(tracer);
 
       // 3. Composite and finish onto the canvas, then encode.
-      compositeAndFinish(this.renderer, plate.texture, tracer.target.texture, fx);
+      compositeAndFinish(this.renderer, plate.texture, tracer.target.texture, mask?.texture ?? null, fx);
       const blob = await new Promise<Blob | null>((resolve) => this.canvas.toBlob(resolve, options.type, options.quality ?? 0.95));
       if (!blob) throw new Error("The browser could not encode the image");
       return blob;
     } finally {
       if (parent && this.spinGroup.parent !== parent) parent.add(this.spinGroup);
-      this.dropMaterial.bumpMap = dropBump;
-      this.dropMaterial.normalMap = dropNormal;
-      this.dropMaterial.needsUpdate = true;
+      for (const shell of waterShells) if (shell.parent !== this.canGroup) this.canGroup.add(shell);
       for (const d of disposables) d.dispose();
       this.scene.background = background;
       helper.visible = gizmoVisible;
@@ -570,6 +568,41 @@ export class CanStage {
       this.refreshBackground();
       this.invalidate(3);
     }
+  }
+
+  /**
+   * Where the water is, as seen by the camera: white where droplets cover the can, grey
+   * by the condensation's opacity, black elsewhere (including where the can hides it).
+   */
+  private renderWaterMask(width: number, height: number): THREE.WebGLRenderTarget | null {
+    const water = this.settings?.water;
+    const field = this.droplets;
+    if (!field || !water || (field.count === 0 && water.haze <= 0)) return null;
+    const target = new THREE.WebGLRenderTarget(width, height, { samples: 4 });
+    const black = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const drops = new THREE.MeshBasicMaterial({ color: 0xffffff, alphaMap: field.coverageTexture, transparent: true, depthWrite: false });
+    const haze = new THREE.MeshBasicMaterial({ color: 0xffffff, alphaMap: field.hazeTexture, transparent: true, depthWrite: false, opacity: this.hazeMaterial.opacity });
+    const swapped: [THREE.Mesh, THREE.Material | THREE.Material[]][] = [];
+    this.spinGroup.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      swapped.push([mesh, mesh.material]);
+      mesh.material = mesh.material === this.dropMaterial ? drops : mesh.material === this.hazeMaterial ? haze : black;
+    });
+    const hidden = [this.ground, this.contact, this.reflection].filter((o) => o.visible);
+    for (const o of hidden) o.visible = false;
+    const background = this.scene.background;
+    this.scene.background = null;
+    this.renderer.setClearColor(0x000000, 1);
+    this.renderer.setRenderTarget(target);
+    this.renderer.clear();
+    this.renderer.render(this.scene, this.camera);
+    this.renderer.setRenderTarget(null);
+    this.scene.background = background;
+    for (const o of hidden) o.visible = true;
+    for (const [mesh, material] of swapped) mesh.material = material;
+    for (const m of [black, drops, haze]) m.dispose();
+    return target;
   }
 
   maxExportSize() {
@@ -590,6 +623,7 @@ export class CanStage {
     this.composer.dispose();
     this.pmrem.dispose();
     this.envTarget?.dispose();
+    disposeTracer(this.renderer);
     this.renderer.dispose();
   }
 

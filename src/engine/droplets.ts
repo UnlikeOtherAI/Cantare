@@ -61,7 +61,6 @@ export class DropletField {
   get count() {
     return this.drops.length;
   }
-
   private texture(canvas: HTMLCanvasElement) {
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.NoColorSpace;

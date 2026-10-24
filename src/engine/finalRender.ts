@@ -20,8 +20,11 @@ export function captureEnvironment(renderer: THREE.WebGLRenderer, envScene: THRE
   return target;
 }
 
+export type TraceStage = "preparing" | "tracing";
+
 export interface TraceOptions {
   samples: number;
+  onStage?(stage: TraceStage): void;
   /** f-number; null renders everything sharp. */
   fStop: number | null;
   focusDistance: number;
@@ -38,9 +41,36 @@ const nextFrame = () =>
     channel.port2.postMessage(0);
   });
 
+// One tracer per renderer, kept between renders: compiling its shader is the slow part
+// (over a minute on some integrated GPUs), and it only recompiles when the scene's
+// material layout changes.
+const tracers = new WeakMap<THREE.WebGLRenderer, WebGLPathTracer>();
+
+function tracerFor(renderer: THREE.WebGLRenderer): WebGLPathTracer {
+  let tracer = tracers.get(renderer);
+  if (tracer) return tracer;
+  tracer = new WebGLPathTracer(renderer);
+  tracer.renderToCanvas = false;
+  tracer.dynamicLowRes = false;
+  tracer.minSamples = 0;
+  tracer.renderDelay = 0;
+  tracer.fadeDuration = 0;
+  tracer.bounces = 10;
+  tracer.transmissiveBounces = 12;
+  tracer.filterGlossyFactor = 0.35;
+  tracer.multipleImportanceSampling = true;
+  tracers.set(renderer, tracer);
+  return tracer;
+}
+
+export function disposeTracer(renderer: THREE.WebGLRenderer) {
+  tracers.get(renderer)?.dispose();
+  tracers.delete(renderer);
+}
+
 /**
- * Path trace `scene` from `camera` at the renderer's current size. Returns the tracer so
- * the caller can read `target.texture` and must dispose it.
+ * Path trace `scene` from `camera` at the renderer's current size. The returned tracer
+ * is shared: read `target.texture` before the next render, and do not dispose it.
  */
 export async function pathTrace(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera, options: TraceOptions): Promise<WebGLPathTracer> {
   const lens = new PhysicalCamera();
@@ -52,31 +82,39 @@ export async function pathTrace(renderer: THREE.WebGLRenderer, scene: THREE.Scen
   lens.apertureBlades = 7;
   lens.updateProjectionMatrix();
 
-  const tracer = new WebGLPathTracer(renderer);
-  tracer.renderToCanvas = false;
-  tracer.dynamicLowRes = false;
-  tracer.minSamples = 0;
-  tracer.renderDelay = 0;
-  tracer.fadeDuration = 0;
-  tracer.bounces = 10;
-  tracer.transmissiveBounces = 12;
-  tracer.filterGlossyFactor = 0.35;
-  tracer.multipleImportanceSampling = true;
+  const tracer = tracerFor(renderer);
   const size = renderer.getSize(new THREE.Vector2());
   // Smaller tiles keep each GPU submission short at large sizes.
   const tiles = Math.max(1, Math.ceil(Math.max(size.x, size.y) / 1400));
   tracer.tiles.set(tiles, tiles);
-  tracer.setScene(scene, lens);
+  options.onStage?.("preparing");
   await nextFrame();
+  const t0 = performance.now();
+  tracer.setScene(scene, lens);
+  const t1 = performance.now();
+
+  // Compile the tracing shader without freezing the page (parallel shader compile).
+  const material = (tracer as unknown as { _pathTracer: { material: THREE.Material } })._pathTracer.material;
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
+  // Status queries block until the driver finishes; skip them for this huge shader.
+  const checks = renderer.debug.checkShaderErrors;
+  renderer.debug.checkShaderErrors = false;
+  await renderer.compileAsync(quad, new THREE.OrthographicCamera());
+  renderer.debug.checkShaderErrors = checks;
+  quad.geometry.dispose();
+  const t2 = performance.now();
+  options.onStage?.("tracing");
 
   let last = performance.now();
+  let first = 0;
   while (tracer.samples < options.samples) {
-    if (options.signal?.aborted) {
-      tracer.dispose();
-      throw new DOMException("Render cancelled", "AbortError");
-    }
+    if (options.signal?.aborted) throw new DOMException("Render cancelled", "AbortError");
     tracer.renderSample();
-    // Yield to the browser so the page stays responsive and progress can paint.
+    if (!first) {
+      first = performance.now();
+      if (import.meta.env.DEV) console.info(`final render: scene ${Math.round(t1 - t0)} ms, compile ${Math.round(t2 - t1)} ms, first sample ${Math.round(first - t2)} ms`);
+    }
+    // Yield so the page stays responsive and progress can paint.
     if (performance.now() - last > 40) {
       options.onProgress?.(Math.floor(tracer.samples), options.samples);
       await nextFrame();
@@ -88,22 +126,27 @@ export async function pathTrace(renderer: THREE.WebGLRenderer, scene: THREE.Scen
 }
 
 /**
- * Lay the traced can (premultiplied alpha) over the plate and run the photographic
+ * Lay the traced can (premultiplied alpha) over the plate, bring the plate's water back
+ * through `water` (a coverage mask, or null for a dry can), and run the photographic
  * finish, drawing to the renderer's canvas.
  */
-export function compositeAndFinish(renderer: THREE.WebGLRenderer, plate: THREE.Texture, traced: THREE.Texture, fx: EffectSettings) {
+export function compositeAndFinish(renderer: THREE.WebGLRenderer, plate: THREE.Texture, traced: THREE.Texture, water: THREE.Texture | null, fx: EffectSettings) {
   const size = renderer.getSize(new THREE.Vector2());
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const material = new THREE.ShaderMaterial({
-    uniforms: { plate: { value: plate }, traced: { value: traced } },
+    uniforms: { plate: { value: plate }, traced: { value: traced }, water: { value: water }, hasWater: { value: water ? 1 : 0 } },
     vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
     fragmentShader: `uniform sampler2D plate;
       uniform sampler2D traced;
+      uniform sampler2D water;
+      uniform float hasWater;
       varying vec2 vUv;
       void main() {
         vec4 p = texture2D(plate, vUv);
         vec4 t = texture2D(traced, vUv);
-        gl_FragColor = vec4(t.rgb + p.rgb * (1.0 - t.a), t.a + p.a * (1.0 - t.a));
+        vec4 c = vec4(t.rgb + p.rgb * (1.0 - t.a), t.a + p.a * (1.0 - t.a));
+        float w = hasWater > 0.5 ? texture2D(water, vUv).r : 0.0;
+        gl_FragColor = mix(c, p, w);
       }`,
     depthTest: false,
     depthWrite: false,
