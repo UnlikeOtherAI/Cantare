@@ -935,8 +935,13 @@ export class CanStage {
     this.scene.environment = next.texture;
 
     this.keyDirection = lightDirection(lighting.azimuth, lighting.elevation);
-    this.keyLight.color.copy(kelvinToColor(lighting.temperature));
-    this.keyLight.intensity = 0.9 * lighting.intensity * (lighting.environment === "daylight" || lighting.environment === "golden" ? 2.2 : 1);
+    // The shadow-casting light matches the key panel in the environment: the same gentle
+    // tint as environment.ts's keyColor (a camera is white-balanced near its key), and a
+    // strength by how hard each setup's key is.
+    const tint = new THREE.Color(1, 1, 1).lerp(kelvinToColor(lighting.temperature), 0.42);
+    this.keyLight.color.copy(tint).multiplyScalar(1 / (0.2126 * tint.r + 0.7152 * tint.g + 0.0722 * tint.b));
+    const keyStrength = { softbox: 0.9, hard: 1.3, daylight: 1.4, golden: 1.9, bar: 0.8, overcast: 0.45 };
+    this.keyLight.intensity = keyStrength[lighting.environment] * lighting.intensity;
     this.dropCaustic.value = 0.32 * lighting.intensity * (lighting.environment === "hard" ? 1.3 : 1);
     this.applyShadowSoftness();
     this.orientLights();
