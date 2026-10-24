@@ -1,0 +1,866 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cantare — editor prototype</title>
+<meta name="theme-color" content="#0d0e10">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-tool="light" data-sheet="half" data-bg-mode="generate" data-art-mode="label">
+
+<!-- ========================================================= icon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-can" viewBox="0 0 24 24"><path d="M8 3.5h8M7 6.5c0-1.1 2.2-2 5-2s5 .9 5 2M7 6.5v12c0 1.1 2.2 2 5 2s5-.9 5-2v-12M7 6.5c0 1.1 2.2 2 5 2s5-.9 5-2"/></symbol>
+    <symbol id="i-colour" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.2 0 2-.9 2-2 0-.6-.3-1-.6-1.4-.3-.4-.4-.7-.4-1.1 0-1 .9-1.5 2-1.5h1.5A4.5 4.5 0 0 0 21 10.5C21 6.4 17 3 12 3Z"/><circle cx="7.5" cy="11.5" r="1"/><circle cx="10.5" cy="7.5" r="1"/><circle cx="15.5" cy="7.5" r="1"/></symbol>
+    <symbol id="i-artwork" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="9.5" r="1.5"/><path d="M20.5 15.5 15.5 11l-7 8"/></symbol>
+    <symbol id="i-light" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/></symbol>
+    <symbol id="i-water" viewBox="0 0 24 24"><path d="M12 3.5s-6 6.3-6 10.5a6 6 0 0 0 12 0c0-4.2-6-10.5-6-10.5Z"/><path d="M9 14.5a3 3 0 0 0 2 2.8"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7H8l1.2-2h5.6L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5v-9Z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+    <symbol id="i-effects" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5 8 12M12 3.5l6.8 4.2M20.5 12l-8.5 0M20.5 12l-3.3 7M12 20.5l4-8M12 20.5 5.2 16.3M3.5 12h8.5M3.5 12l3.3-7"/></symbol>
+    <symbol id="i-background" viewBox="0 0 24 24"><path d="M3.5 17.5 9 10l4 5 2.5-3 5 5.5"/><circle cx="17" cy="7" r="2"/><rect x="3.5" y="4.5" width="17" height="15" rx="2"/></symbol>
+    <symbol id="i-gallery" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M8 7H4v4"/><path d="M4.5 11A8 8 0 1 1 6 17"/></symbol>
+    <symbol id="i-redo" viewBox="0 0 24 24"><path d="M16 7h4v4"/><path d="M19.5 11A8 8 0 1 0 18 17"/></symbol>
+    <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M8 11l4 4 4-4"/><path d="M5 16v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="m8.2 10.8 7.6-4.1M8.2 13.2l7.6 4.1"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-chev-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-chev-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-chev-left" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V5M8 9l4-4 4 4"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
+    <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M4 4v4.5h4.5"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+    <symbol id="i-brush" viewBox="0 0 24 24"><path d="m14 4 6 6-8.5 8.5a3 3 0 0 1-2.1.9H6a2 2 0 0 1-2-2v-3.4a3 3 0 0 1 .9-2.1L14 4Z"/><path d="m11 7 6 6"/></symbol>
+    <symbol id="i-spray" viewBox="0 0 24 24"><rect x="7" y="9" width="8" height="12" rx="1.5"/><path d="M9 9V6.5h4V9M9 4.5h4"/><path d="M18 6h1M18 9h1M18 12h1M20.5 7.5h1M20.5 10.5h1"/></symbol>
+    <symbol id="i-eraser" viewBox="0 0 24 24"><path d="m8.5 19.5-4.4-4.4a1.5 1.5 0 0 1 0-2.1L13.7 3.4a1.5 1.5 0 0 1 2.1 0l4.8 4.8a1.5 1.5 0 0 1 0 2.1L11.5 19.5H8.5Z"/><path d="M6 11.5 12.5 18M4 20h16"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3c.6 4.6 3.4 7.4 8 8-4.6.6-7.4 3.4-8 8-.6-4.6-3.4-7.4-8-8 4.6-.6 7.4-3.4 8-8Z"/><path d="M19 15c.3 1.7 1.3 2.7 3 3-1.7.3-2.7 1.3-3 3-.3-1.7-1.3-2.7-3-3 1.7-.3 2.7-1.3 3-3Z"/></symbol>
+    <symbol id="i-spin" viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8.5" ry="3.5"/><path d="M12 3.5v17"/><path d="m18.5 8.5 2-1 .5 2.3"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5 21 19.5H3L12 3.5Z"/><path d="M12 10v4M12 16.5v.5"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8v.5"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 1 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 1 0 5.7 5.7l1-1"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18" cy="12" r="1.2"/></symbol>
+    <symbol id="i-crosshair" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></symbol>
+    <symbol id="i-ang-front" viewBox="0 0 32 32"><rect x="11" y="6" width="10" height="21" rx="2.5"/><path d="M11 10h10M11 24h10"/></symbol>
+    <symbol id="i-ang-three" viewBox="0 0 32 32"><path d="M10.5 9c0-1.4 2.5-2.4 5.5-2.4s5.5 1 5.5 2.4v15.5c0 1.4-2.5 2.5-5.5 2.5s-5.5-1.1-5.5-2.5V9Z"/><ellipse cx="16" cy="9" rx="5.5" ry="2.4"/></symbol>
+    <symbol id="i-ang-lid" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10"/><circle cx="16" cy="16" r="6.5"/><path d="M16 12.5v4M14.5 18.5h3"/></symbol>
+    <symbol id="i-ang-hero" viewBox="0 0 32 32"><path d="M9 11.5c0-2 3.1-3.5 7-3.5s7 1.5 7 3.5V21c0 2.6-3.1 4.5-7 4.5S9 23.6 9 21v-9.5Z"/><ellipse cx="16" cy="11.5" rx="7" ry="3.5"/><path d="M4 27h24"/></symbol>
+  </defs>
+</svg>
+
+<!-- ============================================================= top bar -->
+<header class="topbar">
+  <div class="topbar__left">
+    <a class="brand" href="#" aria-label="Cantare">Cantare</a>
+  </div>
+  <div class="topbar__centre">
+    <button class="doc" type="button" aria-label="Scene name, click to rename">
+      <span class="doc__name">Untitled scene</span>
+      <span class="doc__meta"><span id="doc-format">330 ml · Standard</span></span>
+    </button>
+  </div>
+  <div class="topbar__right">
+    <div class="btn-group" role="group" aria-label="History">
+      <button class="icon-btn" type="button" title="Undo (⌘Z)"><svg><use href="#i-undo"/></svg></button>
+      <button class="icon-btn" type="button" title="Redo (⇧⌘Z)" disabled><svg><use href="#i-redo"/></svg></button>
+    </div>
+    <button class="icon-btn" type="button" title="Gallery" data-open="gallery"><svg><use href="#i-gallery"/></svg><span class="badge" aria-label="3 renders">3</span></button>
+    <button class="btn btn--primary" type="button" data-open="export"><svg class="btn__icon"><use href="#i-export"/></svg><span>Export</span></button>
+  </div>
+</header>
+
+<!-- =============================================================== stage -->
+<main class="stage" id="stage" aria-label="3D viewport">
+  <div class="stage__backdrop" id="backdrop"></div>
+  <div class="stage__floor"></div>
+
+  <!-- 3D placeholder: a CSS/SVG can generated from real format dimensions -->
+  <div class="can-wrap" id="can-wrap">
+    <svg class="can" id="can" viewBox="0 0 400 640" aria-hidden="true"></svg>
+  </div>
+
+  <!-- Light gizmo (visible when the Light tool is active) -->
+  <div class="gizmo gizmo--light" id="gizmo-light" aria-hidden="true">
+    <svg class="gizmo__ring" viewBox="0 0 400 400">
+      <ellipse cx="200" cy="200" rx="190" ry="72" />
+      <ellipse cx="200" cy="200" rx="190" ry="72" class="gizmo__ring-front" />
+    </svg>
+    <div class="gizmo__handle" id="light-handle" role="slider" tabindex="0" aria-label="Key light direction" aria-valuetext="Azimuth 35°, elevation 40°">
+      <span class="gizmo__ray"></span>
+      <span class="gizmo__tip"></span>
+    </div>
+  </div>
+
+  <!-- Water brush cursor (visible when the Water tool's brush/spray is active) -->
+  <div class="brush-cursor" id="brush-cursor" aria-hidden="true"></div>
+
+  <!-- Label handles (visible when Artwork tool is active and a label is loaded) -->
+  <div class="label-handles" id="label-handles" aria-hidden="true">
+    <div class="label-handles__edge label-handles__edge--top"><span></span></div>
+    <div class="label-handles__edge label-handles__edge--bottom"><span></span></div>
+  </div>
+
+  <!-- HUD: quick angles (top-left) -->
+  <div class="hud hud--angles" role="toolbar" aria-label="Quick angles">
+    <button class="chip chip--glass" type="button" data-angle="front"><svg class="chip__icon"><use href="#i-ang-front"/></svg>Front</button>
+    <button class="chip chip--glass is-active" type="button" data-angle="three"><svg class="chip__icon"><use href="#i-ang-three"/></svg>¾</button>
+    <button class="chip chip--glass" type="button" data-angle="lid"><svg class="chip__icon"><use href="#i-ang-lid"/></svg>Lid</button>
+    <button class="chip chip--glass" type="button" data-angle="hero"><svg class="chip__icon"><use href="#i-ang-hero"/></svg>Hero</button>
+  </div>
+
+  <!-- HUD: stage toolbar (bottom-centre) -->
+  <div class="hud hud--bottom" role="toolbar" aria-label="View">
+    <button class="icon-btn icon-btn--glass" type="button" title="Spin can"><svg><use href="#i-spin"/></svg></button>
+    <button class="icon-btn icon-btn--glass" type="button" title="Frame can"><svg><use href="#i-fit"/></svg></button>
+    <button class="icon-btn icon-btn--glass" type="button" title="Reset view"><svg><use href="#i-reset"/></svg></button>
+    <span class="hud__sep"></span>
+    <button class="icon-btn icon-btn--glass" type="button" title="Toggle background"><svg><use href="#i-eye"/></svg></button>
+    <span class="hud__readout mono" id="hud-readout">¾ · 50 mm</span>
+  </div>
+
+  <!-- Status chip (bottom-left): shown while the background generates or an export renders -->
+  <div class="hud hud--status" id="hud-status" hidden>
+    <span class="spinner" aria-hidden="true"></span>
+    <span id="hud-status-text">Generating background…</span>
+    <button class="link-btn" type="button" data-cancel-gen>Cancel</button>
+  </div>
+
+  <!-- First-run welcome card -->
+  <aside class="welcome" id="welcome" hidden>
+    <h2 class="welcome__title">Put your artwork on it.</h2>
+    <p class="welcome__body">Drop a PNG or JPEG of your label or full print. Cantare wraps it on a 330 ml standard can; change the can any time.</p>
+    <div class="welcome__actions">
+      <button class="btn btn--primary" type="button" data-tool-go="artwork"><svg class="btn__icon"><use href="#i-upload"/></svg>Upload artwork</button>
+      <button class="btn btn--ghost" type="button" data-tool-go="can">Choose a can</button>
+    </div>
+    <button class="icon-btn welcome__close" type="button" aria-label="Dismiss" data-dismiss="welcome"><svg><use href="#i-close"/></svg></button>
+  </aside>
+
+  <!-- Generation shimmer overlay -->
+  <div class="gen-shimmer" id="gen-shimmer" hidden></div>
+</main>
+
+<!-- ============================================================ tool rail -->
+<nav class="rail" aria-label="Tools">
+  <button class="rail__item" type="button" data-tool="can"><svg><use href="#i-can"/></svg><span>Can</span><kbd>1</kbd></button>
+  <button class="rail__item" type="button" data-tool="colour"><svg><use href="#i-colour"/></svg><span>Colour</span><kbd>2</kbd></button>
+  <button class="rail__item" type="button" data-tool="artwork"><svg><use href="#i-artwork"/></svg><span>Artwork</span><kbd>3</kbd></button>
+  <button class="rail__item" type="button" data-tool="light"><svg><use href="#i-light"/></svg><span>Light</span><kbd>4</kbd></button>
+  <button class="rail__item" type="button" data-tool="water"><svg><use href="#i-water"/></svg><span>Water</span><kbd>5</kbd></button>
+  <button class="rail__item" type="button" data-tool="camera"><svg><use href="#i-camera"/></svg><span>Camera</span><kbd>6</kbd></button>
+  <button class="rail__item" type="button" data-tool="effects"><svg><use href="#i-effects"/></svg><span>Effects</span><kbd>7</kbd></button>
+  <button class="rail__item" type="button" data-tool="background"><svg><use href="#i-background"/></svg><span>Scene</span><kbd>8</kbd></button>
+</nav>
+
+<!-- ======================================================== tool panel ==== -->
+<aside class="panel" id="panel">
+  <div class="panel__handle" id="sheet-handle" aria-hidden="true"><span></span></div>
+
+  <!-- ---------------------------------------------------------- CAN ---- -->
+  <section class="tool" data-panel="can">
+    <header class="panel__head">
+      <h2 class="panel__title">Can</h2>
+      <button class="icon-btn panel__collapse" type="button" title="Hide panel" data-collapse><svg><use href="#i-chev-right"/></svg></button>
+    </header>
+    <div class="panel__body">
+      <div class="format-current">
+        <svg class="format-current__thumb" viewBox="0 0 40 72" id="format-thumb"></svg>
+        <div class="format-current__text">
+          <div class="format-current__name" id="format-name">330 ml · Standard</div>
+          <div class="format-current__dims mono" id="format-dims">Ø 66.3 × 115.2 mm</div>
+          <div class="format-current__sub" id="format-sub">Ardagh · 202 CDL end · template 207×107 mm</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="lid-variant">Lid</label>
+        <div class="select">
+          <select id="lid-variant">
+            <option>202 CDL (52.4 mm plug)</option>
+            <option>200 CDL (50.0 mm plug)</option>
+          </select>
+          <svg class="select__chev"><use href="#i-chev-down"/></svg>
+        </div>
+      </div>
+
+      <div class="search">
+        <svg class="search__icon"><use href="#i-search"/></svg>
+        <input id="format-search" type="search" placeholder="Search formats: 440, 16 oz, sleek…" autocomplete="off">
+      </div>
+
+      <div class="seg seg--scroll" role="tablist" aria-label="Can family" id="family-tabs">
+        <button role="tab" class="seg__item is-active" data-family="all">All</button>
+        <button role="tab" class="seg__item" data-family="standard">Standard 66</button>
+        <button role="tab" class="seg__item" data-family="sleek">Sleek 58</button>
+        <button role="tab" class="seg__item" data-family="slim">Slim 53</button>
+        <button role="tab" class="seg__item" data-family="us">US</button>
+        <button role="tab" class="seg__item" data-family="large">Large</button>
+      </div>
+
+      <div class="format-list" id="format-list" role="listbox" aria-label="Formats"></div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------- COLOUR ---- -->
+  <section class="tool" data-panel="colour">
+    <header class="panel__head">
+      <h2 class="panel__title">Colour &amp; finish</h2>
+      <button class="icon-btn panel__collapse" type="button" title="Hide panel" data-collapse><svg><use href="#i-chev-right"/></svg></button>
+    </header>
+    <div class="panel__body">
+      <div class="group">
+        <div class="group__head"><h3 class="group__title">Body</h3><span class="group__hint">Shows wherever artwork doesn't cover</span></div>
+        <div class="swatches" role="radiogroup" aria-label="Body colour">
+          <button class="swatch is-active" type="button" style="--swatch:var(--c-can-silver)" aria-label="Classic silver" title="Classic silver"></button>
+          <button class="swatch" type="button" style="--swatch:var(--c-can-gold)" aria-label="Classic gold" title="Classic gold"></button>
+          <button class="swatch" type="button" style="--swatch:var(--c-can-black)" aria-label="Black" title="Black"></button>
+          <button class="swatch" type="button" style="--swatch:var(--c-can-white)" aria-label="White" title="White"></button>
+          <button class="swatch swatch--custom" type="button" aria-label="Custom colour" title="Custom"><svg><use href="#i-plus"/></svg></button>
+          <div class="hex"><span class="hex__hash">#</span><input class="hex__input mono" value="C9CBCF" maxlength="6" aria-label="Body hex colour" spellcheck="false"></div>
+        </div>
+        <div class="seg" role="radiogroup" aria-label="Body finish">
+          <button class="seg__item is-active" type="button">Gloss</button>
+          <button class="seg__item" type="button">Satin</button>
+          <button class="seg__item" type="button">Matte</button>
+          <button class="seg__item" type="button">Brushed</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group__head"><h3 class="group__title">Lid</h3><button class="link-btn" type="button">Same as body</button></div>
+        <div class="swatches" role="radiogroup" aria-label="Lid colour">
+          <button class="swatch is-active" type="button" style="--swatch:var(--c-can-silver)" aria-label="Classic silver"></button>
+          <button class="swatch" type="button" style="--swatch:var(--c-can-gold)" aria-label="Classic gold"></button>
+          <button class="swatch" type="button" style="--swatch:var(--c-can-black)" aria-label="Black"></button>
+          <button class="swatch" type="button" style="--swatch:var(--c-can-white)" aria-label="White"></button>
+          <button class="swatch swatch--custom" type="button" aria-label="Custom colour"><svg><use href="#i-plus"/></svg></button>
+          <div class="hex"><span class="hex__hash">#</span><input class="hex__input mono" value="C9CBCF" maxlength="6" aria-label="Lid hex colour" spellcheck="false"></div>
+        </div>
+        <div class="seg" role="radiogroup" aria-label="Lid finish">
+          <button class="seg__item" type="button">Gloss</button>
+          <button class="seg__item" type="button">Satin</button>
+          <button class="seg__item" type="button">Matte</button>
+          <button class="seg__item is-active" type="button">Brushed</button>
+        </div>
+      </div>
+
+      <!-- Custom colour popover (shown when a custom swatch is tapped) -->
+      <div class="popover colour-pop" id="colour-pop" hidden>
+        <div class="colour-pop__area"><span class="colour-pop__dot"></span></div>
+        <div class="colour-pop__hue"><span class="colour-pop__dot"></span></div>
+        <div class="colour-pop__row">
+          <div class="hex hex--wide"><span class="hex__hash">#</span><input class="hex__input mono" value="1D4ED8" maxlength="6" aria-label="Hex"></div>
+          <button class="btn btn--sm" type="button">Done</button>
+        </div>
+        <div class="colour-pop__recent"><span class="group__hint">Recent</span><i style="--swatch:#1d4ed8"></i><i style="--swatch:#b91c1c"></i><i style="--swatch:#0f766e"></i><i style="--swatch:#7c3aed"></i></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------ ARTWORK ---- -->
+  <section class="tool" data-panel="artwork">
+    <header class="panel__head">
+      <h2 class="panel__title">Artwork</h2>
+      <button class="icon-btn panel__collapse" type="button" title="Hide panel" data-collapse><svg><use href="#i-chev-right"/></svg></button>
+    </header>
+    <div class="panel__body">
+      <div class="seg" role="radiogroup" aria-label="Decoration type" id="art-mode">
+        <button class="seg__item" type="button" data-art="printed">Printed can</button>
+        <button class="seg__item is-active" type="button" data-art="label">Label</button>
+      </div>
+      <p class="help" data-art-help="printed">Ink on the metal from heel to neck. Transparent areas show the body colour and metal.</p>
+      <p class="help" data-art-help="label">Paper or film wrapped around the body, with a visible edge and overlap.</p>
+
+      <!-- Empty: dropzone -->
+      <button class="dropzone" type="button" id="art-drop">
+        <svg class="dropzone__icon"><use href="#i-upload"/></svg>
+        <span class="dropzone__title">Drop artwork or tap to choose</span>
+        <span class="dropzone__hint">PNG or JPEG · transparent PNG keeps the metal visible</span>
+      </button>
+
+      <!-- Loaded: asset card -->
+      <div class="asset" id="art-asset" hidden>
+        <div class="asset__thumb"><div class="asset__thumb-art"></div></div>
+        <div class="asset__text">
+          <div class="asset__name">hopfen-label-v3.png</div>
+          <div class="asset__meta mono">2480 × 1240 px · 300 dpi</div>
+          <div class="asset__fit asset__fit--inferred"><svg><use href="#i-info"/></svg><span>Size inferred from image: 208 × 84 mm</span></div>
+        </div>
+        <button class="icon-btn" type="button" title="Replace or remove"><svg><use href="#i-more"/></svg></button>
+      </div>
+
+      <div class="group" data-art-only="label">
+        <div class="field field--seg">
+          <label class="field__label">Wrap</label>
+          <div class="seg seg--sm">
+            <button class="seg__item is-active" type="button">Full</button>
+            <button class="seg__item" type="button">Partial</button>
+          </div>
+        </div>
+        <div class="field field--seg">
+          <label class="field__label">Material</label>
+          <div class="seg seg--sm">
+            <button class="seg__item is-active" type="button">Paper</button>
+            <button class="seg__item" type="button">Film</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="slider" data-art-only="label">
+          <label class="slider__label" for="art-h">Height</label>
+          <input class="slider__input" id="art-h" type="range" min="20" max="115" value="84" style="--p:67%">
+          <div class="value"><input class="value__input mono" value="84" aria-label="Height"><span class="value__unit">mm</span></div>
+        </div>
+        <div class="slider" data-art-only="label">
+          <label class="slider__label" for="art-y">Position</label>
+          <input class="slider__input" id="art-y" type="range" min="0" max="40" value="10" style="--p:25%">
+          <div class="value"><input class="value__input mono" value="10" aria-label="Position from base"><span class="value__unit">mm</span></div>
+        </div>
+        <div class="slider">
+          <label class="slider__label" for="art-r">Rotation</label>
+          <input class="slider__input" id="art-r" type="range" min="-180" max="180" value="12" style="--p:53%">
+          <div class="value"><input class="value__input mono" value="12" aria-label="Rotation"><span class="value__unit">°</span></div>
+        </div>
+      </div>
+
+      <p class="help help--note"><svg><use href="#i-info"/></svg><span>Drag on the can to rotate the artwork; drag the label edges to resize. The body colour shows around it — change it in <button class="link-btn" type="button" data-tool-go="colour">Colour</button>.</span></p>
+    </div>
+  </section>
+
+  <!-- -------------------------------------------------------- LIGHT ---- -->
+  <section class="tool" data-panel="light">
+    <header class="panel__head">
+      <h2 class="panel__title">Light</h2>
+      <button class="icon-btn panel__collapse" type="button" title="Hide panel" data-collapse><svg><use href="#i-chev-right"/></svg></button>
+    </header>
+    <div class="panel__body">
+      <div class="group">
+        <div class="group__head"><h3 class="group__title">Key light</h3><span class="group__hint">Drag the sun on the stage or here</span></div>
+        <div class="dome-row">
+          <div class="dome" id="dome" role="slider" tabindex="0" aria-label="Key light direction (top-down)">
+            <span class="dome__ring"></span>
+            <span class="dome__cross"></span>
+            <span class="dome__can"></span>
+            <span class="dome__sun" id="dome-sun"></span>
+          </div>
+          <div class="dome-readout">
+            <div class="readout"><span class="readout__label">Azimuth</span><span class="readout__value mono" id="ro-az">35°</span></div>
+            <div class="readout"><span class="readout__label">Elevation</span><span class="readout__value mono" id="ro-el">40°</span></div>
+            <div class="readout"><span class="readout__label">Distance</span><span class="readout__value mono">1.6 m</span></div>
+          </div>
+        </div>
+        <div class="slider">
+          <label class="slider__label" for="l-int">Intensity</label>
+          <input class="slider__input" id="l-int" type="range" min="0" max="200" value="120" style="--p:60%">
+          <div class="value"><input class="value__input mono" value="120" aria-label="Intensity"><span class="value__unit">%</span></div>
+        </div>
+        <div class="slider">
+          <label class="slider__label" for="l-soft">Softness</label>
+          <input class="slider__input" id="l-soft" type="range" min="0" max="100" value="55" style="--p:55%">
+          <div class="value"><input class="value__input mono" value="55" aria-label="Softness"><span class="value__unit">%</span></div>
+        </div>
+        <div class="slider slider--temp">
+          <label class="slider__label" for="l-temp">Temperature</label>
+          <input class="slider__input" id="l-temp" type="range" min="2700" max="8000" value="5200" style="--p:47%">
+          <div class="value"><input class="value__input mono" value="5200" aria-label="Colour temperature"><span class="value__unit">K</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group__head"><h3 class="group__title">Rim light</h3><label class="toggle"><input type="checkbox" checked><span></span></label></div>
+        <div class="slider">
+          <label class="slider__label" for="r-int">Intensity</label>
+          <input class="slider__input" id="r-int" type="range" min="0" max="200" value="70" style="--p:35%">
+          <div class="value"><input class="value__input mono" value="70" aria-label="Rim intensity"><span class="value__unit">%</span></div>
+        </div>
+        <div class="field field--seg">
+          <label class="field__label">Side</label>
+          <div class="seg seg--sm">
+            <button class="seg__item is-active" type="button">Opposite</button>
+            <button class="seg__item" type="button">Left</button>
+            <button class="seg__item" type="button">Right</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group__head"><h3 class="group__title">Environment</h3><span class="group__hint">Reflections</span></div>
+        <div class="tiles tiles--3">
+          <button class="tile is-active" type="button"><span class="tile__art env env--softbox"></span><span class="tile__label">Softbox</span></button>
+          <button class="tile" type="button"><span class="tile__art env env--hard"></span><span class="tile__label">Hard studio</span></button>
+          <button class="tile" type="button"><span class="tile__art env env--daylight"></span><span class="tile__label">Daylight</span></button>
+          <button class="tile" type="button"><span class="tile__art env env--golden"></span><span class="tile__label">Golden hour</span></button>
+          <button class="tile" type="button"><span class="tile__art env env--bar"></span><span class="tile__label">Bar</span></button>
+          <button class="tile" type="button"><span class="tile__art env env--overcast"></span><span class="tile__label">Overcast</span></button>
+        </div>
+        <div class="slider">
+          <label class="slider__label" for="env-rot">Rotation</label>
+          <input class="slider__input" id="env-rot" type="range" min="0" max="360" value="0" style="--p:0%">
+          <div class="value"><input class="value__input mono" value="0" aria-label="Environment rotation"><span class="value__unit">°</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- -------------------------------------------------------- WATER ---- -->
+  <section class="tool" data-panel="water">
+    <header class="panel__head">
+      <h2 class="panel__title">Water</h2>
+      <button class="icon-btn panel__collapse" type="button" title="Hide panel" data-collapse><svg><use href="#i-chev-right"/></svg></button>
+    </header>
+    <div class="panel__body">
+      <div class="chips" role="radiogroup" aria-label="Presets">
+        <button class="chip" type="button">Dry</button>
+        <button class="chip is-active" type="button">Chilled</button>
+        <button class="chip" type="button">Ice cold</button>
+        <button class="chip" type="button">Poured over</button>
+      </div>
+
+      <div class="group">
+        <div class="group__head"><h3 class="group__title">Droplets</h3></div>
+        <div class="slider">
+          <label class="slider__label" for="w-den">Density</label>
+          <input class="slider__input" id="w-den" type="range" min="0" max="100" value="45" style="--p:45%">
+          <div class="value"><input class="value__input mono" value="45" aria-label="Density"><span class="value__unit">%</span></div>
+        </div>
+        <div class="slider">
+          <label class="slider__label" for="w-size">Size</label>
+          <input class="slider__input" id="w-size" type="range" min="0" max="100" value="30" style="--p:30%">
+          <div class="value"><input class="value__input mono" value="30" aria-label="Size"><span class="value__unit">%</span></div>
+        </div>
+        <div class="slider">
+          <label class="slider__label" for="w-runs">Runs &amp; drips</label>
+          <input class="slider__input" id="w-runs" type="range" min="0" max="100" value="20" style="--p:20%">
+          <div class="value"><input class="value__input mono" value="20" aria-label="Runs"><span class="value__unit">%</span></div>
+        </div>
+        <div class="slider">
+          <label class="slider__label" for="w-haze">Haze</label>
+          <input class="slider__input" id="w-haze" type="range" min="0" max="100" value="35" style="--p:35%">
+          <div class="value"><input class="value__input mono" value="35" aria-label="Condensation haze"><span class="value__unit">%</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group__head"><h3 class="group__title">Paint by hand</h3><span class="group__hint">On the can</span></div>
+        <div class="seg seg--icons" role="radiogroup" aria-label="Water tool" id="water-tool">
+          <button class="seg__item" type="button" data-wtool="none" aria-label="Orbit"><svg><use href="#i-camera"/></svg><span>Orbit</span></button>
+          <button class="seg__item is-active" type="button" data-wtool="brush"><svg><use href="#i-brush"/></svg><span>Brush</span></button>
+          <button class="seg__item" type="button" data-wtool="spray"><svg><use href="#i-spray"/></svg><span>Spray</span></button>
+          <button class="seg__item" type="button" data-wtool="erase"><svg><use href="#i-eraser"/></svg><span>Erase</span></button>
+        </div>
+        <div class="slider">
+          <label class="slider__label" for="w-brush">Brush size</label>
+          <input class="slider__input" id="w-brush" type="range" min="4" max="80" value="28" style="--p:32%">
+          <div class="value"><input class="value__input mono" value="28" aria-label="Brush size"><span class="value__unit">mm</span></div>
+        </div>
+        <div class="slider">
+          <label class="slider__label" for="w-flow">Flow</label>
+          <input class="slider__input" id="w-flow" type="range" min="0" max="100" value="60" style="--p:60%">
+          <div class="value"><input class="value__input mono" value="60" aria-label="Flow"><span class="value__unit">%</span></div>
+        </div>
+        <p class="help help--note" id="water-hint"><svg><use href="#i-info"/></svg><span>Brush: paint droplets where you drag. Spray: hold still to soak one spot. Two fingers still orbit.</span></p>
+      </div>
+
+      <div class="row-actions">
+        <button class="btn btn--ghost" type="button"><svg class="btn__icon"><use href="#i-trash"/></svg>Clear all water</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------- CAMERA ---- -->
+  <section class="tool" data-panel="camera">
+    <header class="panel__head">
+      <h2 class="panel__title">Camera</h2>
+      <button class="icon-btn panel__collapse" type="button" title="Hide panel" data-collapse><svg><use href="#i-chev-right"/></svg></button>
+    </header>
+    <div class="panel__body">
+      <div class="group">
+        <div class="group__head"><h3 class="group__title">Quick angles</h3><span class="group__hint">Drag the stage to orbit</span></div>
+        <div class="tiles tiles--4" role="radiogroup" aria-label="Quick angles">
+          <button class="tile" type="button" data-angle="front"><svg class="tile__icon"><use href="#i-ang-front"/></svg><span class="tile__label">Front</span></button>
+          <button class="tile is-active" type="button" data-angle="three"><svg class="tile__icon"><use href="#i-ang-three"/></svg><span class="tile__label">¾</span></button>
+          <button class="tile" type="button" data-angle="lid"><svg class="tile__icon"><use href="#i-ang-lid"/></svg><span class="tile__label">Lid</span></button>
+          <button class="tile" type="button" data-angle="hero"><svg class="tile__icon"><use href="#i-ang-hero"/></svg><span class="tile__label">Hero</span></button>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group__head"><h3 class="group__title">Can spin</h3><label class="toggle toggle--labelled"><span class="toggle__text">Turntable</span><input type="checkbox"><span></span></label></div>
+        <div class="dial-row">
+          <div class="dial" id="spin-dial" role="slider" tabindex="0" aria-label="Spin can" aria-valuetext="24°">
+            <span class="dial__tick"></span>
+            <span class="dial__needle" id="spin-needle"></span>
+          </div>
+          <div class="slider slider--stacked">
+            <div class="slider__row">
+              <label class="slider__label" for="c-spin">Spin</label>
+              <div class="value"><input class="value__input mono" value="24" aria-label="Spin angle"><span class="value__unit">°</span></div>
+            </div>
+            <input class="slider__input" id="c-spin" type="range" min="0" max="360" value="24" style="--p:7%">
+            <p class="help">Rotates the can, not the camera. Artwork, lid tab and droplets turn with it.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group__head"><h3 class="group__title">Lens</h3></div>
+        <div class="slider">
+          <label class="slider__label" for="c-fl">Focal length</label>
+          <input class="slider__input" id="c-fl" type="range" min="24" max="135" value="50" style="--p:23%">
+          <div class="value"><input class="value__input mono" value="50" aria-label="Focal length"><span class="value__unit">mm</span></div>
+        </div>
+        <div class="slider">
+          <label class="slider__label" for="c-h">Height</label>
+          <input class="slider__input" id="c-h" type="range" min="-30" max="60" value="12" style="--p:47%">
+          <div class="value"><input class="value__input mono" value="12" aria-label="Camera height"><span class="value__unit">°</span></div>
+        </div>
+      </div>
+
+      <div class="row-actions">
+        <button class="btn btn--ghost" type="button"><svg class="btn__icon"><use href="#i-reset"/></svg>Reset camera</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------ EFFECTS ---- -->
+  <section class="tool" data-panel="effects">
+    <header class="panel__head">
+      <h2 class="panel__title">Effects</h2>
+      <button class="icon-btn panel__collapse" type="button" title="Hide panel" data-collapse><svg><use href="#i-chev-right"/></svg></button>
+    </header>
+    <div class="panel__body panel__body--flush">
+      <details class="fx" open>
+        <summary class="fx__head"><label class="toggle" onclick="event.stopPropagation()"><input type="checkbox" checked><span></span></label><span class="fx__title">Depth of field</span><span class="fx__value mono">f/2.8</span><svg class="fx__chev"><use href="#i-chev-down"/></svg></summary>
+        <div class="fx__body">
+          <div class="slider">
+            <label class="slider__label">Aperture ƒ/</label>
+            <input class="slider__input" type="range" min="0" max="100" value="38" style="--p:38%">
+            <div class="value"><input class="value__input mono" value="2.8" aria-label="Aperture"><span class="value__unit"></span></div>
+          </div>
+          <div class="field field--seg">
+            <label class="field__label">Focus</label>
+            <div class="seg seg--sm">
+              <button class="seg__item is-active" type="button">Label</button>
+              <button class="seg__item" type="button">Lid</button>
+              <button class="seg__item" type="button">Tap to focus</button>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="fx">
+        <summary class="fx__head"><label class="toggle" onclick="event.stopPropagation()"><input type="checkbox" checked><span></span></label><span class="fx__title">Bloom</span><span class="fx__value mono">20</span><svg class="fx__chev"><use href="#i-chev-down"/></svg></summary>
+        <div class="fx__body">
+          <div class="slider"><label class="slider__label">Amount</label><input class="slider__input" type="range" min="0" max="100" value="20" style="--p:20%"><div class="value"><input class="value__input mono" value="20"><span class="value__unit">%</span></div></div>
+          <div class="slider"><label class="slider__label">Threshold</label><input class="slider__input" type="range" min="0" max="100" value="70" style="--p:70%"><div class="value"><input class="value__input mono" value="70"><span class="value__unit">%</span></div></div>
+        </div>
+      </details>
+
+      <details class="fx">
+        <summary class="fx__head"><label class="toggle" onclick="event.stopPropagation()"><input type="checkbox"><span></span></label><span class="fx__title">Vignette</span><span class="fx__value mono">Off</span><svg class="fx__chev"><use href="#i-chev-down"/></svg></summary>
+        <div class="fx__body">
+          <div class="slider"><label class="slider__label">Amount</label><input class="slider__input" type="range" min="0" max="100" value="30" style="--p:30%"><div class="value"><input class="value__input mono" value="30"><span class="value__unit">%</span></div></div>
+        </div>
+      </details>
+
+      <details class="fx">
+        <summary class="fx__head"><label class="toggle" onclick="event.stopPropagation()"><input type="checkbox" checked><span></span></label><span class="fx__title">Grain</span><span class="fx__value mono">12</span><svg class="fx__chev"><use href="#i-chev-down"/></svg></summary>
+        <div class="fx__body">
+          <div class="slider"><label class="slider__label">Amount</label><input class="slider__input" type="range" min="0" max="100" value="12" style="--p:12%"><div class="value"><input class="value__input mono" value="12"><span class="value__unit">%</span></div></div>
+          <div class="slider"><label class="slider__label">Size</label><input class="slider__input" type="range" min="0" max="100" value="40" style="--p:40%"><div class="value"><input class="value__input mono" value="40"><span class="value__unit">%</span></div></div>
+        </div>
+      </details>
+
+      <details class="fx" open>
+        <summary class="fx__head"><label class="toggle" onclick="event.stopPropagation()"><input type="checkbox" checked><span></span></label><span class="fx__title">Colour grade</span><span class="fx__value mono">Crisp</span><svg class="fx__chev"><use href="#i-chev-down"/></svg></summary>
+        <div class="fx__body">
+          <div class="chips chips--scroll">
+            <button class="chip" type="button">Neutral</button>
+            <button class="chip is-active" type="button">Crisp</button>
+            <button class="chip" type="button">Warm</button>
+            <button class="chip" type="button">Cool</button>
+            <button class="chip" type="button">Film</button>
+            <button class="chip" type="button">Mono</button>
+          </div>
+          <div class="slider slider--wide"><label class="slider__label">Exposure</label><input class="slider__input slider__input--centre" type="range" min="-100" max="100" value="10" style="--p:55%"><div class="value"><input class="value__input mono" value="+0.1"><span class="value__unit">EV</span></div></div>
+          <div class="slider"><label class="slider__label">Contrast</label><input class="slider__input slider__input--centre" type="range" min="-100" max="100" value="15" style="--p:57%"><div class="value"><input class="value__input mono" value="+15"><span class="value__unit"></span></div></div>
+          <div class="slider"><label class="slider__label">Saturation</label><input class="slider__input slider__input--centre" type="range" min="-100" max="100" value="0" style="--p:50%"><div class="value"><input class="value__input mono" value="0"><span class="value__unit"></span></div></div>
+          <div class="slider slider--temp"><label class="slider__label">Warmth</label><input class="slider__input slider__input--centre" type="range" min="-100" max="100" value="5" style="--p:52%"><div class="value"><input class="value__input mono" value="+5"><span class="value__unit"></span></div></div>
+        </div>
+      </details>
+
+      <details class="fx">
+        <summary class="fx__head"><label class="toggle" onclick="event.stopPropagation()"><input type="checkbox" checked><span></span></label><span class="fx__title">Ground</span><span class="fx__value mono">Shadow · Reflection</span><svg class="fx__chev"><use href="#i-chev-down"/></svg></summary>
+        <div class="fx__body">
+          <div class="slider"><label class="slider__label">Shadow</label><input class="slider__input" type="range" min="0" max="100" value="80" style="--p:80%"><div class="value"><input class="value__input mono" value="80"><span class="value__unit">%</span></div></div>
+          <div class="slider"><label class="slider__label">Shadow softness</label><input class="slider__input" type="range" min="0" max="100" value="50" style="--p:50%"><div class="value"><input class="value__input mono" value="50"><span class="value__unit">%</span></div></div>
+          <div class="slider"><label class="slider__label">Reflection</label><input class="slider__input" type="range" min="0" max="100" value="35" style="--p:35%"><div class="value"><input class="value__input mono" value="35"><span class="value__unit">%</span></div></div>
+          <div class="slider"><label class="slider__label">Reflection blur</label><input class="slider__input" type="range" min="0" max="100" value="40" style="--p:40%"><div class="value"><input class="value__input mono" value="40"><span class="value__unit">%</span></div></div>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------- BACKGROUND ---- -->
+  <section class="tool" data-panel="background">
+    <header class="panel__head">
+      <h2 class="panel__title">Scene</h2>
+      <button class="icon-btn panel__collapse" type="button" title="Hide panel" data-collapse><svg><use href="#i-chev-right"/></svg></button>
+    </header>
+    <div class="panel__body">
+      <div class="seg" role="radiogroup" aria-label="Background source" id="bg-mode">
+        <button class="seg__item is-active" type="button" data-bg="generate"><svg><use href="#i-sparkle"/></svg>Generate</button>
+        <button class="seg__item" type="button" data-bg="upload">Upload</button>
+        <button class="seg__item" type="button" data-bg="colour">Colour</button>
+      </div>
+
+      <!-- Generate -->
+      <div class="group" data-bg-only="generate">
+        <div class="prompt">
+          <textarea class="prompt__input" id="gen-prompt" rows="3" placeholder="Describe the scene: a wet slate bar top at night, warm bokeh behind…">Wet slate bar top, late evening, warm bokeh lights in the background, shallow depth of field</textarea>
+          <div class="prompt__foot">
+            <span class="prompt__count mono">98 / 600</span>
+            <span class="prompt__ratio mono" title="Matches export aspect">4:5 · 2048 px</span>
+          </div>
+        </div>
+        <div class="chips chips--scroll" aria-label="Suggestions">
+          <button class="chip chip--suggest" type="button">Sunlit picnic table</button>
+          <button class="chip chip--suggest" type="button">Marble kitchen counter</button>
+          <button class="chip chip--suggest" type="button">Ice bucket close-up</button>
+          <button class="chip chip--suggest" type="button">Festival stage at dusk</button>
+          <button class="chip chip--suggest" type="button">Minimal studio sweep</button>
+        </div>
+
+        <!-- idle -->
+        <div data-gen-state="idle">
+          <button class="btn btn--primary btn--block" type="button" data-gen-start><svg class="btn__icon"><use href="#i-sparkle"/></svg>Generate background</button>
+        </div>
+        <!-- generating -->
+        <div data-gen-state="generating" hidden>
+          <div class="progress">
+            <div class="progress__row"><span>Generating…</span><span class="mono" id="gen-pct">34%</span></div>
+            <div class="progress__bar"><span id="gen-bar" style="width:34%"></span></div>
+            <div class="progress__row progress__row--sub"><span>Usually 15–30 s. You can keep editing the can.</span><button class="link-btn" type="button" data-cancel-gen>Cancel</button></div>
+          </div>
+        </div>
+        <!-- error -->
+        <div data-gen-state="error" hidden>
+          <div class="alert alert--danger" role="alert">
+            <svg><use href="#i-alert"/></svg>
+            <div><strong>Generation failed.</strong> The image service didn't respond. Your prompt is kept.</div>
+            <button class="btn btn--sm" type="button" data-gen-start>Retry</button>
+          </div>
+        </div>
+
+        <div class="group__head"><h3 class="group__title">Recent</h3><span class="group__hint">Tap to reuse</span></div>
+        <div class="thumbs">
+          <button class="thumb is-active" type="button" style="--thumb:linear-gradient(160deg,#4a3a2a,#120f0d)"></button>
+          <button class="thumb" type="button" style="--thumb:linear-gradient(160deg,#8aa8c0,#2a3e52)"></button>
+          <button class="thumb" type="button" style="--thumb:linear-gradient(160deg,#d9d2c5,#8c8273)"></button>
+          <button class="thumb" type="button" style="--thumb:linear-gradient(160deg,#1a2a1f,#0b100c)"></button>
+        </div>
+      </div>
+
+      <!-- Upload -->
+      <div class="group" data-bg-only="upload" hidden>
+        <button class="dropzone" type="button">
+          <svg class="dropzone__icon"><use href="#i-upload"/></svg>
+          <span class="dropzone__title">Drop a photo or tap to choose</span>
+          <span class="dropzone__hint">JPEG, PNG or HEIC · larger than your export is best</span>
+        </button>
+        <div class="field field--seg">
+          <label class="field__label">Fit</label>
+          <div class="seg seg--sm">
+            <button class="seg__item is-active" type="button">Fill</button>
+            <button class="seg__item" type="button">Fit</button>
+          </div>
+        </div>
+        <div class="slider"><label class="slider__label">Blur</label><input class="slider__input" type="range" min="0" max="100" value="0" style="--p:0%"><div class="value"><input class="value__input mono" value="0"><span class="value__unit">%</span></div></div>
+        <p class="help">Drag the backdrop on the stage to reposition it.</p>
+      </div>
+
+      <!-- Colour -->
+      <div class="group" data-bg-only="colour" hidden>
+        <div class="seg seg--sm">
+          <button class="seg__item" type="button">Solid</button>
+          <button class="seg__item is-active" type="button">Gradient</button>
+        </div>
+        <div class="grad-stops">
+          <button class="swatch swatch--lg" type="button" style="--swatch:#34373c" aria-label="Top colour"></button>
+          <div class="grad-stops__bar"></div>
+          <button class="swatch swatch--lg" type="button" style="--swatch:#0f1012" aria-label="Bottom colour"></button>
+        </div>
+        <div class="slider"><label class="slider__label">Angle</label><input class="slider__input" type="range" min="0" max="360" value="180" style="--p:50%"><div class="value"><input class="value__input mono" value="180"><span class="value__unit">°</span></div></div>
+        <div class="chips">
+          <button class="chip" type="button">Studio grey</button>
+          <button class="chip" type="button">White sweep</button>
+          <button class="chip" type="button">Charcoal</button>
+          <button class="chip" type="button">Brand</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group__head"><h3 class="group__title">Match the scene</h3></div>
+        <label class="row-toggle">
+          <span class="row-toggle__text"><span>Match light to background</span><span class="group__hint">Sets key direction and colour from the image</span></span>
+          <span class="toggle"><input type="checkbox" checked><span></span></span>
+        </label>
+        <label class="row-toggle">
+          <span class="row-toggle__text"><span>Ground the can</span><span class="group__hint">Contact shadow and reflection on the backdrop</span></span>
+          <span class="toggle"><input type="checkbox" checked><span></span></span>
+        </label>
+      </div>
+    </div>
+  </section>
+</aside>
+
+<!-- Compact-only: bottom tool strip -->
+<nav class="toolstrip" aria-label="Tools">
+  <button class="toolstrip__item" type="button" data-tool="can"><svg><use href="#i-can"/></svg><span>Can</span></button>
+  <button class="toolstrip__item" type="button" data-tool="colour"><svg><use href="#i-colour"/></svg><span>Colour</span></button>
+  <button class="toolstrip__item" type="button" data-tool="artwork"><svg><use href="#i-artwork"/></svg><span>Artwork</span></button>
+  <button class="toolstrip__item" type="button" data-tool="light"><svg><use href="#i-light"/></svg><span>Light</span></button>
+  <button class="toolstrip__item" type="button" data-tool="water"><svg><use href="#i-water"/></svg><span>Water</span></button>
+  <button class="toolstrip__item" type="button" data-tool="camera"><svg><use href="#i-camera"/></svg><span>Camera</span></button>
+  <button class="toolstrip__item" type="button" data-tool="effects"><svg><use href="#i-effects"/></svg><span>Effects</span></button>
+  <button class="toolstrip__item" type="button" data-tool="background"><svg><use href="#i-background"/></svg><span>Scene</span></button>
+</nav>
+
+<!-- =========================================================== export ==== -->
+<div class="dialog-scrim" id="export" hidden>
+  <div class="dialog dialog--export" role="dialog" aria-modal="true" aria-labelledby="export-title">
+    <header class="dialog__head">
+      <h2 class="dialog__title" id="export-title">Export</h2>
+      <button class="icon-btn" type="button" aria-label="Close" data-close="export"><svg><use href="#i-close"/></svg></button>
+    </header>
+    <div class="dialog__body export">
+      <div class="export__preview">
+        <div class="export__frame" id="export-frame" style="--ar:4/5">
+          <div class="export__frame-art"></div>
+          <span class="export__frame-size mono">2048 × 2560</span>
+        </div>
+      </div>
+      <div class="export__settings" data-export-state="settings">
+        <div class="field">
+          <label class="field__label">Aspect</label>
+          <div class="seg seg--sm" id="export-ar">
+            <button class="seg__item" type="button" data-ar="1/1">1:1</button>
+            <button class="seg__item is-active" type="button" data-ar="4/5">4:5</button>
+            <button class="seg__item" type="button" data-ar="3/4">3:4</button>
+            <button class="seg__item" type="button" data-ar="16/9">16:9</button>
+            <button class="seg__item" type="button" data-ar="9/16">9:16</button>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field__label">Size</label>
+          <div class="seg seg--sm">
+            <button class="seg__item" type="button">1024</button>
+            <button class="seg__item is-active" type="button">2048</button>
+            <button class="seg__item" type="button">4096</button>
+            <button class="seg__item" type="button">6144</button>
+          </div>
+          <p class="help">Longest edge, px. 4096 and above render in tiles and take longer on phones.</p>
+        </div>
+        <div class="field">
+          <label class="field__label">Format</label>
+          <div class="seg seg--sm">
+            <button class="seg__item is-active" type="button">PNG</button>
+            <button class="seg__item" type="button">JPEG</button>
+          </div>
+        </div>
+        <label class="row-toggle">
+          <span class="row-toggle__text"><span>Transparent background</span><span class="group__hint">PNG only · keeps shadow as alpha</span></span>
+          <span class="toggle"><input type="checkbox"><span></span></span>
+        </label>
+        <div class="dialog__actions">
+          <button class="btn btn--primary btn--lg" type="button" data-export-start><svg class="btn__icon"><use href="#i-download"/></svg>Download PNG</button>
+          <p class="help help--centre">On iOS and Android this reads <strong>Save to Photos</strong> and a second button <strong>Share</strong>.</p>
+        </div>
+      </div>
+
+      <div class="export__settings" data-export-state="progress" hidden>
+        <div class="progress progress--lg">
+          <div class="progress__row"><span>Rendering 2048 × 2560</span><span class="mono" id="exp-pct">0%</span></div>
+          <div class="progress__bar"><span id="exp-bar" style="width:0%"></span></div>
+          <div class="progress__row progress__row--sub"><span id="exp-sub">Tile 1 of 4 · supersampled</span><button class="link-btn" type="button" data-export-cancel>Cancel</button></div>
+        </div>
+      </div>
+
+      <div class="export__settings export__done" data-export-state="done" hidden>
+        <div class="done-mark"><svg><use href="#i-check"/></svg></div>
+        <div class="done-text"><strong>Saved to gallery</strong><span class="mono">cantare-330-standard-2048x2560.png · 6.1 MB</span></div>
+        <div class="dialog__actions dialog__actions--row">
+          <button class="btn btn--primary" type="button"><svg class="btn__icon"><use href="#i-download"/></svg>Download again</button>
+          <button class="btn btn--ghost" type="button"><svg class="btn__icon"><use href="#i-share"/></svg>Share</button>
+        </div>
+        <button class="link-btn" type="button" data-export-reset>Export another size</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================================== gallery ==== -->
+<div class="dialog-scrim" id="gallery" hidden>
+  <div class="dialog dialog--gallery" role="dialog" aria-modal="true" aria-labelledby="gallery-title">
+    <header class="dialog__head">
+      <h2 class="dialog__title" id="gallery-title">Gallery <span class="dialog__count">3</span></h2>
+      <span class="group__hint">Saved on this device</span>
+      <button class="icon-btn" type="button" aria-label="Close" data-close="gallery"><svg><use href="#i-close"/></svg></button>
+    </header>
+    <div class="dialog__body gallery">
+      <button class="render" type="button" style="--ar:4/5;--thumb:linear-gradient(160deg,#4a3a2a,#120f0d)"><span class="render__art"></span><span class="render__meta"><span>Hopfen 330 · Bar</span><span class="mono">2048 × 2560 · PNG</span></span></button>
+      <button class="render" type="button" style="--ar:1/1;--thumb:linear-gradient(160deg,#d9d2c5,#8c8273)"><span class="render__art"></span><span class="render__meta"><span>Hopfen 330 · Studio</span><span class="mono">4096 × 4096 · JPEG</span></span></button>
+      <button class="render" type="button" style="--ar:9/16;--thumb:linear-gradient(160deg,#8aa8c0,#2a3e52)"><span class="render__art"></span><span class="render__meta"><span>Sleek 330 · Daylight</span><span class="mono">2160 × 3840 · PNG</span></span></button>
+      <div class="gallery__empty" hidden>
+        <p class="gallery__empty-title">Nothing saved yet</p>
+        <p class="help">Exports land here. They stay on this device.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ toast ==== -->
+<div class="toast" id="toast" role="status" hidden>
+  <svg class="toast__icon toast__icon--ok"><use href="#i-check"/></svg>
+  <span class="toast__text">Saved to gallery</span>
+  <button class="link-btn" type="button" data-open="gallery">Open</button>
+</div>
+
+<!-- ============================================================ splash === -->
+<div class="splash" id="splash" hidden>
+  <div class="splash__mark">Cantare</div>
+  <div class="splash__bar"><span></span></div>
+  <div class="splash__sub">Compiling shaders…</div>
+</div>
+
+<!-- ================================================ prototype state menu == -->
+<details class="proto" id="proto">
+  <summary class="proto__btn" title="Prototype states">States</summary>
+  <div class="proto__menu">
+    <label><input type="checkbox" data-state="welcome"> First-run welcome card</label>
+    <label><input type="checkbox" data-state="artwork" checked> Artwork loaded</label>
+    <label><input type="checkbox" data-state="generating"> Background generating</label>
+    <label><input type="checkbox" data-state="generror"> Generation error</label>
+    <label><input type="checkbox" data-state="toast"> Success toast</label>
+    <label><input type="checkbox" data-state="splash"> Loading splash</label>
+    <label><input type="checkbox" data-state="collapsed"> Panel collapsed</label>
+    <hr>
+    <label>Sheet <select data-sheet-set><option value="peek">peek</option><option value="half" selected>half</option><option value="full">full</option></select></label>
+  </div>
+</details>
+
+<script src="app.js"></script>
+</body>
+</html>
