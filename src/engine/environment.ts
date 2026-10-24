@@ -51,10 +51,42 @@ function room(top: THREE.Color, bottom: THREE.Color, horizon?: THREE.Color) {
     colors.push(c.r, c.g, c.b);
   }
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
-  return new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide }));
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide }));
+  mesh.userData.room = true;
+  return mesh;
 }
 
-export function buildEnvironmentScene(lighting: LightingSettings): THREE.Scene {
+/**
+ * Wrap a flat background photo round the can as a rough equirectangular panorama, so
+ * the metal reflects the scene it is composited into. Blurred: it only has to carry
+ * colour and brightness, not detail.
+ */
+function photoRoom(image: HTMLImageElement): THREE.Mesh {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d")!;
+  const iw = image.naturalWidth;
+  const ih = image.naturalHeight;
+  ctx.filter = "blur(10px)";
+  // Sky and floor: stretch the top and bottom strips of the photo.
+  ctx.drawImage(image, 0, 0, iw, ih * 0.08, -20, -20, 1064, 170);
+  ctx.drawImage(image, 0, ih * 0.92, iw, ih * 0.08, -20, 362, 1064, 170);
+  // Horizon band: the photo, mirrored so the wrap has no hard seam.
+  ctx.drawImage(image, 0, 128, 512, 256);
+  ctx.save();
+  ctx.translate(1024, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(image, 0, 128, 512, 256);
+  ctx.restore();
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(20, 64, 32), new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide }));
+  mesh.userData.room = true;
+  return mesh;
+}
+
+export function buildEnvironmentScene(lighting: LightingSettings, backdrop: HTMLImageElement | null = null): THREE.Scene {
   const scene = new THREE.Scene();
   const warm = kelvinToColor(lighting.temperature);
   const key = lightDirection(lighting.azimuth, lighting.elevation);
@@ -112,6 +144,10 @@ export function buildEnvironmentScene(lighting: LightingSettings): THREE.Scene {
       scene.add(panel(0.25, 6, white, 5 * rim, at(around(165, 4))));
       break;
     }
+  }
+  if (backdrop) {
+    for (const child of scene.children.filter((c) => c.userData.room)) scene.remove(child);
+    scene.add(photoRoom(backdrop));
   }
   return scene;
 }

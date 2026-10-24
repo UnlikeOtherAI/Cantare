@@ -256,7 +256,8 @@ export class CanStage {
     if (formatChanged) this.buildCan(next);
     if (formatChanged || prev!.body !== next.body || prev!.artwork !== next.artwork || !prev) this.paint(next);
     if (formatChanged || prev!.lid !== next.lid || prev!.lidRotation !== next.lidRotation) this.applyLid(next);
-    if (!prev || prev.lighting !== next.lighting) this.applyLighting(next);
+    const backdropChanged = !prev || prev.background.kind !== next.background.kind || prev.background.imageUrl !== next.background.imageUrl;
+    if (!prev || prev.lighting !== next.lighting || backdropChanged) this.applyLighting(next);
     if (formatChanged || prev!.water !== next.water) this.applyWater(next, prev);
     if (!prev || prev.effects !== next.effects || formatChanged) this.applyEffects(next);
     if (!prev || prev.background !== next.background) this.applyBackground(next);
@@ -551,7 +552,8 @@ export class CanStage {
 
   private applyLighting(settings: CanSettings) {
     const { lighting } = settings;
-    const envScene = buildEnvironmentScene(lighting);
+    const photo = lighting.matchBackground && settings.background.kind === "image" ? this.backgroundImage : null;
+    const envScene = buildEnvironmentScene(lighting, photo);
     const next = this.pmrem.fromScene(envScene, 0.015);
     envScene.traverse((o) => {
       const mesh = o as THREE.Mesh;

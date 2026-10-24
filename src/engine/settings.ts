@@ -45,6 +45,8 @@ export interface LightingSettings {
   temperature: number;
   rim: number;
   environment: EnvironmentPreset;
+  /** Reflect the background photo in the can instead of the studio walls. */
+  matchBackground: boolean;
   exposure: number;
 }
 
@@ -102,7 +104,7 @@ export const DEFAULT_SETTINGS: CanSettings = {
   lid: { preset: "silver", color: "#1a1a1a", metallic: true, finish: "gloss" },
   lidRotation: 0,
   artwork: { url: null, mode: "printed", ink: "opaque", labelStock: "paper", height: null, offset: 0, rotation: 0 },
-  lighting: { azimuth: -38, elevation: 28, intensity: 1, softness: 0.6, temperature: 5600, rim: 0.7, environment: "studio", exposure: 1 },
+  lighting: { azimuth: -38, elevation: 28, intensity: 1, softness: 0.6, temperature: 5600, rim: 0.7, environment: "studio", matchBackground: true, exposure: 1 },
   water: { density: 0, size: 0.5, haze: 0, seed: 1, tool: "none", brush: 14 },
   effects: { depthOfField: 0, bloom: 0.25, vignette: 0.3, grain: 0.15, contrast: 0.05, saturation: 0, warmth: 0, shadow: 0.7, reflection: 0 },
   background: { kind: "studio", color: "#16171a", color2: "#3a3d44", imageUrl: null },
