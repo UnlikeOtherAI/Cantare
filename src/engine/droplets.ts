@@ -288,6 +288,7 @@ export class DropletField {
     hc.globalCompositeOperation = "source-over";
     hc.fillStyle = "#000";
     hc.fillRect(0, 0, w, h);
+    cc.globalCompositeOperation = "source-over";
     cc.fillStyle = "#000";
     cc.fillRect(0, 0, w, h);
 
@@ -296,7 +297,7 @@ export class DropletField {
       ctx.save();
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
-      ctx.strokeStyle = ctx === hc ? "rgb(46,46,46)" : "rgb(150,150,150)";
+      ctx.strokeStyle = ctx === hc ? "rgb(46,46,46)" : "rgb(0,150,150)";
       for (const trail of this.trails) {
         for (const shift of [-w, 0, w]) {
           ctx.lineWidth = trail.width * px;
@@ -329,14 +330,27 @@ export class DropletField {
         hc.fill();
         // Coverage: G = alpha, B = how close to the rim (drops refract a dark ring there).
         const edge = cc.createRadialGradient(cx, cy - ry * 0.08, 0, cx, cy, ry * 0.97);
-        edge.addColorStop(0, "rgb(255,255,0)");
-        edge.addColorStop(0.55, "rgb(255,255,30)");
-        edge.addColorStop(0.82, "rgb(255,255,170)");
-        edge.addColorStop(1, "rgb(255,255,255)");
+        edge.addColorStop(0, "rgb(0,255,0)");
+        edge.addColorStop(0.55, "rgb(0,255,30)");
+        edge.addColorStop(0.82, "rgb(0,255,170)");
+        edge.addColorStop(1, "rgb(0,255,255)");
+        cc.globalCompositeOperation = "source-over";
         cc.fillStyle = edge;
         cc.beginPath();
         cc.ellipse(cx, cy, rx * 0.97, ry * 0.97, 0, 0, Math.PI * 2);
         cc.fill();
+        // R = caustic: light focused through the drop onto the can, low in the bead.
+        if (rx > 2) {
+          const ky = cy + ry * 0.48;
+          const caustic = cc.createRadialGradient(cx, ky, 0, cx, ky, rx * 0.42);
+          caustic.addColorStop(0, "rgba(255,0,0,0.9)");
+          caustic.addColorStop(1, "rgba(255,0,0,0)");
+          cc.globalCompositeOperation = "lighter";
+          cc.fillStyle = caustic;
+          cc.beginPath();
+          cc.ellipse(cx, ky, rx * 0.42, ry * 0.26, 0, 0, Math.PI * 2);
+          cc.fill();
+        }
       }
     }
 
@@ -356,7 +370,8 @@ export class DropletField {
       const data = ctx.createImageData(w, h);
       for (let i = 0; i < w * h; i++) {
         // Fine micro-droplets: mostly dense fog with brighter specks.
-        const v = 150 + rand() * 70 + (rand() < 0.08 ? 35 : 0);
+        const r = rand();
+        const v = 70 + r * r * 120 + (rand() < 0.06 ? 65 : 0);
         data.data[i * 4] = data.data[i * 4 + 1] = data.data[i * 4 + 2] = Math.min(255, v);
         data.data[i * 4 + 3] = 255;
       }
@@ -375,7 +390,7 @@ export class DropletField {
     for (const shift of [-w, 0, w]) {
       for (const d of this.drops) {
         ctx.beginPath();
-        ctx.arc(d.x * px + shift, toY(d.y), d.r * px * 1.45, 0, Math.PI * 2);
+        ctx.arc(d.x * px + shift, toY(d.y), d.r * px * 1.18 + 0.6, 0, Math.PI * 2);
         ctx.fill();
       }
       for (const t of [...this.trails, ...this.wipes]) {

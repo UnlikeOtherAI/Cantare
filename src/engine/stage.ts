@@ -93,6 +93,7 @@ export class CanStage {
   private labelMaterial = new THREE.MeshPhysicalMaterial({ roughness: 0.6 });
   private dropMaterial: THREE.MeshPhysicalMaterial;
   private hazeMaterial: THREE.MeshPhysicalMaterial;
+  private dropCaustic = { value: 0.35 };
   private bodyCanvases = { color: document.createElement("canvas"), orm: document.createElement("canvas") };
   private bodyColor = new THREE.CanvasTexture(this.bodyCanvases.color);
   private bodyOrm = new THREE.CanvasTexture(this.bodyCanvases.orm);
@@ -163,24 +164,26 @@ export class CanStage {
       transparent: true,
       depthWrite: false,
       specularIntensity: 1,
-      envMapIntensity: 2.6,
+      envMapIntensity: 5,
       bumpScale: 9
     });
     this.dropMaterial.onBeforeCompile = (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace(
+      shader.uniforms.dropCaustic = this.dropCaustic;
+      shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nuniform float dropCaustic;").replace(
         "#include <dithering_fragment>",
         `#include <dithering_fragment>
         #ifdef USE_ALPHAMAP
-          float dropEdge = texture2D(alphaMap, vAlphaMapUv).b;
-          gl_FragColor.rgb *= 1.0 - dropEdge * 0.78;
+          vec4 dropMask = texture2D(alphaMap, vAlphaMapUv);
+          gl_FragColor.rgb *= 1.0 - dropMask.b * 0.78;
+          gl_FragColor.rgb += dropMask.r * dropCaustic * vec3(1.0, 0.97, 0.92);
         #endif`
       );
     };
     this.dropMaterial.customProgramCacheKey = () => "cantare-drops";
     this.hazeMaterial = new THREE.MeshPhysicalMaterial({
-      color: "#e9eef1",
+      color: "#d5dde2",
       metalness: 0,
-      roughness: 0.5,
+      roughness: 0.42,
       transparent: true,
       depthWrite: false,
       opacity: 0,
@@ -568,6 +571,7 @@ export class CanStage {
     this.keyLight.intensity = 0.9 * lighting.intensity * (lighting.environment === "daylight" ? 2.2 : 1);
     this.keyLight.shadow.radius = 3 + lighting.softness * 22;
     this.grade.uniforms.get("exposure")!.value = lighting.exposure;
+    this.dropCaustic.value = 0.32 * lighting.intensity * (lighting.environment === "noir" ? 0.5 : 1);
   }
 
   private applyWater(settings: CanSettings, prev: CanSettings | null) {
@@ -577,7 +581,7 @@ export class CanStage {
     if (!prev || prev.water.density !== water.density || prev.water.size !== water.size || prev.water.seed !== water.seed) {
       if (water.density > 0 || prev) field.scatter(water.density, water.size, water.seed);
     }
-    this.hazeMaterial.opacity = water.haze * 0.92;
+    this.hazeMaterial.opacity = Math.pow(water.haze, 1.5) * 0.95;
     this.hazeMaterial.visible = water.haze > 0;
     this.controls.enableRotate = water.tool === "none";
     this.canvas.style.cursor = water.tool === "none" ? "grab" : "crosshair";
