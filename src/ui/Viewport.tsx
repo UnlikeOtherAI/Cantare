@@ -79,7 +79,7 @@ export function Stage({ exporting }: { exporting: string | null }) {
       ? "water"
       : ui.tool === "artwork" && settings.artwork.url
         ? "artwork"
-        : "orbit";
+        : "turn";
   useEffect(() => activeStage?.setInteraction(interaction), [interaction]);
   useEffect(() => activeStage?.setGizmo(ui.tool === "camera"), [ui.tool]);
 

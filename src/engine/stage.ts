@@ -98,7 +98,8 @@ export interface ExportOptions {
   transparent?: boolean;
 }
 
-export type StageInteraction = "orbit" | "water" | "artwork" | "focus";
+/** What a one-pointer drag on the stage does. "turn" rotates the can itself. */
+export type StageInteraction = "turn" | "water" | "artwork" | "focus";
 
 const SENSOR_HEIGHT = 24;
 
@@ -175,7 +176,7 @@ export class CanStage {
   private firstFrame = false;
   private disposed = false;
   private built = false;
-  private interaction: StageInteraction = "orbit";
+  private interaction: StageInteraction = "turn";
   private pointers = new Set<number>();
   private stroke: { id: number; x: number; y: number; last: THREE.Vector2 | null } | null = null;
   private raycaster = new THREE.Raycaster();
@@ -337,11 +338,13 @@ export class CanStage {
 
   setInteraction(mode: StageInteraction) {
     this.interaction = mode;
-    const claimed = mode !== "orbit";
-    // One pointer goes to the tool; two fingers still orbit and zoom.
-    this.controls.mouseButtons.LEFT = claimed ? (null as unknown as THREE.MOUSE) : THREE.MOUSE.ROTATE;
-    this.controls.touches.ONE = claimed ? (null as unknown as THREE.TOUCH) : THREE.TOUCH.ROTATE;
-    this.canvas.style.cursor = mode === "orbit" ? "grab" : mode === "artwork" ? "ew-resize" : mode === "focus" ? "crosshair" : "none";
+    // One pointer always belongs to the can or the tool; the camera orbits with the
+    // right button or two fingers, and zooms with the wheel or a pinch.
+    this.controls.mouseButtons.LEFT = null as unknown as THREE.MOUSE;
+    this.controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
+    this.controls.touches.ONE = null as unknown as THREE.TOUCH;
+    this.controls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE;
+    this.canvas.style.cursor = mode === "turn" ? "grab" : mode === "artwork" ? "ew-resize" : mode === "focus" ? "crosshair" : "none";
   }
 
   /** Show the rotation gizmo on the can (the Camera tool). */
@@ -1042,7 +1045,9 @@ export class CanStage {
       this.endStroke();
       return;
     }
-    if (this.interaction === "orbit") return;
+    if (event.button !== 0 && event.pointerType === "mouse") return;
+    // The rotation gizmo got there first.
+    if (this.gizmoDragging || (this.gizmo.enabled && this.gizmo.axis !== null)) return;
     if (this.interaction === "focus") {
       const hit = this.hit(event, [this.canGroup]);
       if (hit) this.onFocusPicked?.([hit.point.x, hit.point.y, hit.point.z]);
@@ -1056,6 +1061,12 @@ export class CanStage {
   private onPointerMove = (event: PointerEvent) => {
     const stroke = this.stroke;
     if (!stroke || event.pointerId !== stroke.id) return;
+    if (this.interaction === "turn") {
+      this.turnCan(event.clientX - stroke.x, event.clientY - stroke.y);
+      stroke.x = event.clientX;
+      stroke.y = event.clientY;
+      return;
+    }
     if (this.interaction === "artwork") {
       const dx = event.clientX - stroke.x;
       const dy = event.clientY - stroke.y;
@@ -1077,8 +1088,23 @@ export class CanStage {
   };
 
   private onDoubleClick = () => {
-    if (this.interaction === "orbit") this.frameCan();
+    if (this.interaction === "turn") this.frameCan();
   };
+
+  /**
+   * Drag to turn the can: sideways spins it around its own axis, up and down tips it
+   * towards or away from the camera.
+   */
+  private turnCan(dx: number, dy: number) {
+    const q = this.spinGroup.quaternion.clone();
+    const spin = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(dx * 0.5));
+    const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0).setY(0).normalize();
+    const tip = new THREE.Quaternion().setFromAxisAngle(right, THREE.MathUtils.degToRad(dy * 0.4));
+    q.multiply(spin).premultiply(tip);
+    const e = new THREE.Euler().setFromQuaternion(q, "XZY");
+    const deg = THREE.MathUtils.radToDeg;
+    this.onOrientationDrag?.({ pitch: deg(e.x), spin: (((deg(e.y) - this.turntableAngle) % 360) + 360) % 360, roll: deg(e.z) });
+  }
 
   private endStroke() {
     if (!this.stroke) return;

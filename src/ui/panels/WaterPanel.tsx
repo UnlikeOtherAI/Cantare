@@ -12,7 +12,7 @@ const PRESETS: { label: string; water: Pick<WaterSettings, "density" | "size" | 
 ];
 
 const HINTS: Record<WaterTool, string> = {
-  none: "Drag the stage to orbit. Pick Brush, Spray or Erase to work on the can.",
+  none: "Drag the stage to turn the can. Pick Brush, Spray or Erase to work on it.",
   brush: "Brush: paint droplets where you drag. Two fingers still orbit.",
   spray: "Spray: hold still to soak one spot; heavy drops run down. Two fingers still orbit.",
   erase: "Erase: wipe water and condensation off. Two fingers still orbit."
@@ -49,7 +49,7 @@ export function WaterPanel() {
           label="Water tool"
           variant="icons"
           options={[
-            { value: "none", label: "Orbit", icon: "camera" },
+            { value: "none", label: "Turn", icon: "spin" },
             { value: "brush", label: "Brush", icon: "brush" },
             { value: "spray", label: "Spray", icon: "spray" },
             { value: "erase", label: "Erase", icon: "eraser" }
