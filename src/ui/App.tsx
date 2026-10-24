@@ -24,7 +24,7 @@ import { LightPanel } from "./panels/LightPanel";
 import { ScenePanel } from "./panels/ScenePanel";
 import { WaterPanel } from "./panels/WaterPanel";
 import { PanelHead } from "./controls";
-import { Stage } from "./Viewport";
+import { getStage, Stage } from "./Viewport";
 
 const TOOL_META: Record<Tool, { label: string; title: string; icon: IconName; panel: () => ReactNode; flush?: boolean }> = {
   can: { label: "Can", title: "Can", icon: "can", panel: CanPanel },
@@ -130,7 +130,7 @@ export function App() {
         e.preventDefault();
         const on = !useUi.getState().turntable;
         useUi.getState().set({ turntable: on });
-        import("./Viewport").then(({ getStage }) => getStage()?.setTurntable(on));
+        getStage()?.setTurntable(on);
       }
     };
     window.addEventListener("keydown", onKey);

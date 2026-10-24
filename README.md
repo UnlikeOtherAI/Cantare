@@ -5,6 +5,7 @@ upload the artwork, light it, add water, drop in a background and export.
 
 - [Product brief](docs/brief.md)
 - [Beverage can 3D reference (UK, EU, US)](docs/can-reference.md)
+- [Front-end design by Fable](design/DESIGN.md) and the [screen captures](docs/screenshots/)
 
 ## How it fits together
 
@@ -25,8 +26,10 @@ the Ledger `lk_` token stays on the server.
 pnpm install
 pnpm dev          # http://localhost:5180
 pnpm server       # http://localhost:8797, proxied from /api in dev
-pnpm test
+pnpm test         # unit tests (geometry, placement, server)
 pnpm typecheck
+pnpm e2e          # Playwright flows on desktop and phone sizes (needs pnpm dev)
+node scripts/capture-screens.mjs docs/screenshots   # every screen and state, for reviews
 ```
 
 Copy `.env.example` to `.env` (or export the variables) to enable generation: `LEDGER_URL`,
