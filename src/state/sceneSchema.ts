@@ -4,6 +4,7 @@
 
 import {
   DEFAULT_SETTINGS,
+  type ArtworkFit,
   type ArtworkMode,
   type BackgroundFit,
   type BackgroundKind,
@@ -95,7 +96,8 @@ const ENUMS: [string, string, readonly string[]][] = [
   ["body", "finish", FINISHES],
   ["lid", "preset", PRESETS],
   ["lid", "finish", FINISHES],
-  ["artwork", "mode", options<ArtworkMode>({ printed: true, label: true })],
+  ["artwork", "mode", options<ArtworkMode>({ printed: true, label: true, sticker: true })],
+  ["artwork", "fit", options<ArtworkFit>({ auto: true, wrap: true, aspect: true })],
   ["artwork", "ink", options<InkMode>({ opaque: true, translucent: true })],
   ["artwork", "labelStock", options<LabelStock>({ paper: true, film: true })],
   ["lighting", "rimSide", options<RimSide>({ opposite: true, left: true, right: true })],
