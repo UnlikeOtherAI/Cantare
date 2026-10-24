@@ -62,6 +62,8 @@ test("colour and artwork survive a reload", async ({ page }) => {
 });
 
 test("a saved setup comes back after changes and a reload", async ({ page }) => {
+  // Two full loads plus a save and an apply: on a GPU-less CI runner this outlasts one test's budget.
+  test.slow();
   await page.goto("/");
   await waitForStage(page);
   await page.getByRole("button", { name: "Try a sample" }).click();
