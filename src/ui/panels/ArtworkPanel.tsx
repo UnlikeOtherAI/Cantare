@@ -1,21 +1,30 @@
 import { useState } from "react";
 import { demoArtwork } from "../../engine/demoArtwork";
+import type { ArtworkFit, ArtworkMode } from "../../engine/settings";
 import { useEditor } from "../../state/editor";
 import { useUi } from "../../state/ui";
 import { Dropzone, Field, Group, Note, Seg, Slider, useFilePicker } from "../controls";
 import { Icon } from "../icons";
 
+const RESET = { top: null, bottom: null, fit: "auto" as const };
+
 export function loadArtworkFile(file: File) {
   const { patch, settings } = useEditor.getState();
   if (settings.artwork.url?.startsWith("blob:")) URL.revokeObjectURL(settings.artwork.url);
-  patch("artwork", { url: URL.createObjectURL(file), name: file.name, height: null, offset: 0, wrap: null });
+  patch("artwork", { url: URL.createObjectURL(file), name: file.name, ...RESET });
   useUi.getState().set({ welcome: false });
 }
 
 export function loadSampleArtwork() {
-  useEditor.getState().patch("artwork", { url: demoArtwork(), name: "Sample: Hopwell IPA", height: null, offset: 0, wrap: null });
+  useEditor.getState().patch("artwork", { url: demoArtwork(), name: "Sample: Hopwell IPA", ...RESET });
   useUi.getState().set({ welcome: false });
 }
+
+const MODES: { value: ArtworkMode; label: string; help: string }[] = [
+  { value: "printed", label: "Printed", help: "Ink on the metal, from the top lip down to the foot and all the way round. Wraparound designs go here. Transparent areas show the body colour." },
+  { value: "label", label: "Label", help: "Paper or film on the flat, printable part of the body, with a visible edge." },
+  { value: "sticker", label: "Sticker", help: "A die-cut patch with rounded corners on the flat part of the body, sized from your image." }
+];
 
 export function ArtworkPanel() {
   const artwork = useEditor((s) => s.settings.artwork);
@@ -31,24 +40,17 @@ export function ArtworkPanel() {
   const circumference = format ? Math.PI * format.bodyDiameter : 0;
   const widthMm = placement ? placement.wrap * circumference : 0;
   const dpi = size && widthMm ? Math.round(size.width / (widthMm / 25.4)) : 0;
-  const label = artwork.mode === "label";
+  const mode = MODES.find((m) => m.value === artwork.mode)!;
 
   return (
     <>
-      <Seg
+      <Seg<ArtworkMode>
         label="Decoration type"
-        options={[
-          { value: "printed", label: "Printed can" },
-          { value: "label", label: "Label" }
-        ]}
+        options={MODES.map(({ value, label }) => ({ value, label }))}
         value={artwork.mode}
-        onChange={(mode) => patch("artwork", { mode, height: null, offset: 0 })}
+        onChange={(next) => patch("artwork", { mode: next, ...RESET })}
       />
-      <p className="help">
-        {label
-          ? "Paper or film wrapped around the body, with a visible edge."
-          : "Ink on the metal from the bottom of the can to the lid. Transparent areas show the body colour and metal."}
-      </p>
+      <p className="help">{mode.help}</p>
 
       {!artwork.url ? (
         <>
@@ -80,7 +82,7 @@ export function ArtworkPanel() {
                 <span>
                   {placement.fromTemplate && format.artwork
                     ? `Matches ${format.supplier} ${format.name} template (${format.artwork.width} × ${format.artwork.height} mm)`
-                    : `Size ${artwork.height == null ? "inferred from image" : "set"}: ${Math.round(widthMm)} × ${Math.round(placement.height)} mm`}
+                    : `${Math.round(widthMm)} × ${Math.round(placement.top - placement.base)} mm${placement.stretched ? ", stretched round the can" : ""}`}
                 </span>
               </div>
             )}
@@ -100,8 +102,8 @@ export function ArtworkPanel() {
                 <button type="button" onClick={() => (setMenu(false), replace())}>
                   Replace…
                 </button>
-                <button type="button" onClick={() => (setMenu(false), patch("artwork", { height: null, offset: 0, wrap: null }))}>
-                  Re-infer size
+                <button type="button" onClick={() => (setMenu(false), patch("artwork", RESET))}>
+                  Reset placement
                 </button>
                 <button type="button" onClick={() => (setMenu(false), patch("artwork", { url: null, name: null }))}>
                   Remove
@@ -112,40 +114,46 @@ export function ArtworkPanel() {
         </div>
       )}
 
-      {label ? (
-        <Group>
-          <Field label="Wrap" seg>
-            <Seg
+      <Group title="Placement" hint={artwork.mode === "printed" ? "Lip to foot by default" : "On the flat part"}>
+        {placement && (
+          <>
+            <Slider
+              label="Top edge"
+              unit="mm"
+              min={Math.floor(placement.range.low)}
+              max={Math.ceil(placement.range.high)}
+              value={Math.round(placement.top)}
+              onChange={(top) => patch("artwork", { top, bottom: Math.min(placement.base, top - 4) })}
+            />
+            <Slider
+              label="Bottom edge"
+              unit="mm"
+              min={Math.floor(placement.range.low)}
+              max={Math.ceil(placement.range.high)}
+              value={Math.round(placement.base)}
+              onChange={(bottom) => patch("artwork", { bottom, top: Math.max(placement.top, bottom + 4) })}
+            />
+          </>
+        )}
+        <Slider label="Rotation" unit="°" min={-180} max={180} value={Math.round(artwork.rotation)} onChange={(rotation) => patch("artwork", { rotation })} />
+        {artwork.mode !== "sticker" && (
+          <Field label="Width" seg>
+            <Seg<ArtworkFit>
               size="sm"
-              label="Wrap"
+              label="Width"
               options={[
-                { value: "full", label: "Full" },
-                { value: "partial", label: "Partial" }
+                { value: "auto", label: "Auto", title: "Stretch round the can when the image nearly fits, otherwise keep its proportions" },
+                { value: "wrap", label: "All round", title: "Stretch the artwork round the whole can" },
+                { value: "aspect", label: "Proportional", title: "Keep the image's proportions; a narrow image leaves a gap at the back" }
               ]}
-              value={artwork.wrap == null ? "full" : "partial"}
-              onChange={(v) => patch("artwork", { wrap: v === "full" ? null : 0.5, height: null })}
+              value={artwork.fit}
+              onChange={(fit) => patch("artwork", { fit })}
             />
           </Field>
-          {artwork.wrap == null && placement && placement.wrap < 0.99 && (
-            <p className="help">This artwork is too tall to wrap all the way round at this height, so it covers {Math.round(placement.wrap * 100)}% of the can.</p>
-          )}
-          {artwork.wrap != null && (
-            <Slider label="Coverage" unit="%" min={10} max={100} value={Math.round(artwork.wrap * 100)} onChange={(v) => patch("artwork", { wrap: v / 100, height: null })} />
-          )}
-          <Field label="Material" seg>
-            <Seg
-              size="sm"
-              label="Label material"
-              options={[
-                { value: "paper", label: "Paper" },
-                { value: "film", label: "Film" }
-              ]}
-              value={artwork.labelStock}
-              onChange={(labelStock) => patch("artwork", { labelStock })}
-            />
-          </Field>
-        </Group>
-      ) : (
+        )}
+      </Group>
+
+      {artwork.mode === "printed" ? (
         <Field label="Ink" seg>
           <Seg
             size="sm"
@@ -158,20 +166,23 @@ export function ArtworkPanel() {
             onChange={(ink) => patch("artwork", { ink })}
           />
         </Field>
+      ) : (
+        <Field label="Material" seg>
+          <Seg
+            size="sm"
+            label="Label material"
+            options={[
+              { value: "paper", label: "Paper" },
+              { value: "film", label: artwork.mode === "sticker" ? "Vinyl" : "Film" }
+            ]}
+            value={artwork.labelStock}
+            onChange={(labelStock) => patch("artwork", { labelStock })}
+          />
+        </Field>
       )}
 
-      <Group>
-        {label && placement && (
-          <>
-            <Slider label="Height" unit="mm" min={10} max={Math.round(format ? format.height - format.neckHeight : 150)} value={Math.round(placement.height)} onChange={(height) => patch("artwork", { height })} />
-            <Slider label="Position" unit="mm" min={-60} max={60} value={Math.round(artwork.offset)} onChange={(offset) => patch("artwork", { offset })} />
-          </>
-        )}
-        <Slider label="Rotation" unit="°" min={-180} max={180} value={Math.round(artwork.rotation)} onChange={(rotation) => patch("artwork", { rotation })} />
-      </Group>
-
       <Note>
-        Drag on the can to rotate the artwork{label ? "; drag up or down to move the label, or its violet edges to resize" : ""}. The body colour shows around it — change it in{" "}
+        Drag on the can with this tool to slide the artwork round it or up and down; drag the violet edges to set the top and bottom. The body colour shows around it — change it in{" "}
         <button className="link-btn" type="button" onClick={() => setTool("colour")}>
           Colour
         </button>

@@ -1,18 +1,8 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import {
-  BloomEffect,
-  BrightnessContrastEffect,
-  DepthOfFieldEffect,
-  Effect,
-  EffectComposer,
-  EffectPass,
-  HueSaturationEffect,
-  RenderPass,
-  ToneMappingEffect,
-  ToneMappingMode,
-  VignetteEffect
-} from "postprocessing";
+import { TransformControls } from "three/addons/controls/TransformControls.js";
+import { DepthOfFieldEffect, EffectComposer, EffectPass, RenderPass } from "postprocessing";
+import { configurePost, createPostEffects, postEffectList, type PostEffects } from "./postEffects";
 import { paintBody, placeArtwork, type ArtworkPlacement } from "./decoration";
 import { DropletField } from "./droplets";
 import { buildEnvironmentScene, estimateLight, kelvinToColor, lightDirection, paintBackdrop } from "./environment";
@@ -22,59 +12,11 @@ import { lidNormalMap, rivetGeometry, tabGeometry } from "./lidDetail";
 import { applySurface, finishValues, surfaceSpec } from "./materials";
 import { arcAtHeight, arcLengths, buildProfiles, type CanProfiles } from "./profile";
 import type { CameraPreset, CanSettings } from "./settings";
+import { compositeAndFinish } from "./finalComposite";
+import type { TraceStage } from "./finalRender";
+import { stopTraceWorker, traceInWorker } from "./traceClient";
+import { snapshotScene } from "./traceScene";
 import { loadImage } from "./textures";
-
-// Exposure and white balance before tone mapping.
-class GradeEffect extends Effect {
-  constructor() {
-    super(
-      "GradeEffect",
-      `uniform float exposure;
-      uniform float warmth;
-      void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
-        vec3 c = inputColor.rgb * exposure;
-        c *= vec3(1.0 + warmth * 0.07, 1.0 + warmth * 0.01, 1.0 - warmth * 0.08);
-        outputColor = vec4(c, inputColor.a);
-      }`,
-      {
-        uniforms: new Map<string, THREE.Uniform>([
-          ["exposure", new THREE.Uniform(1)],
-          ["warmth", new THREE.Uniform(0)]
-        ])
-      }
-    );
-  }
-}
-
-// Luminance film grain after tone mapping, with a grain size in output pixels.
-class GrainEffect extends Effect {
-  constructor() {
-    super(
-      "GrainEffect",
-      `uniform float amount;
-      uniform float grainSize;
-      uniform vec2 pixels;
-      float hash(vec2 p) { p = fract(p * vec2(443.897, 441.423)); p += dot(p, p.yx + 19.19); return fract((p.x + p.y) * p.x); }
-      void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
-        vec2 cell = floor(uv * pixels / grainSize);
-        float n = hash(cell) + hash(cell + 17.13) - 1.0;
-        float l = dot(inputColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-        float weight = amount * (0.35 + 0.65 * (1.0 - abs(l * 2.0 - 1.0)));
-        outputColor = vec4(inputColor.rgb + n * weight * 0.07, inputColor.a);
-      }`,
-      {
-        uniforms: new Map<string, THREE.Uniform>([
-          ["amount", new THREE.Uniform(0)],
-          ["grainSize", new THREE.Uniform(1)],
-          ["pixels", new THREE.Uniform(new THREE.Vector2(1, 1))]
-        ])
-      }
-    );
-  }
-  override setSize(width: number, height: number) {
-    (this.uniforms.get("pixels")!.value as THREE.Vector2).set(width, height);
-  }
-}
 
 export interface StageInfo {
   format: CanFormat;
@@ -97,7 +39,16 @@ export interface ExportOptions {
   transparent?: boolean;
 }
 
-export type StageInteraction = "orbit" | "water" | "artwork" | "focus";
+export interface FinalRenderOptions extends ExportOptions {
+  /** Path-tracing samples per pixel: more is cleaner and slower. */
+  samples: number;
+  onProgress?(samples: number, total: number): void;
+  onStage?(stage: TraceStage): void;
+  signal?: AbortSignal;
+}
+
+/** What a one-pointer drag on the stage does. "turn" rotates the can itself. */
+export type StageInteraction = "turn" | "water" | "artwork" | "focus";
 
 const SENSOR_HEIGHT = 24;
 
@@ -112,21 +63,23 @@ export class CanStage {
   /** Artwork tool drags: rotation in degrees and vertical offset in mm. */
   onArtworkDrag: ((rotation: number, offset: number) => void) | null = null;
   onFocusPicked: ((point: [number, number, number]) => void) | null = null;
+  /** Rotation gizmo drags: degrees, Euler XZY so spin stays around the can's own axis. */
+  onOrientationDrag: ((orientation: { pitch: number; spin: number; roll: number }) => void) | null = null;
 
   private scene = new THREE.Scene();
   private composer: EffectComposer;
   private dof: DepthOfFieldEffect;
   private dofPass: EffectPass;
-  private bloom: BloomEffect;
-  private grade = new GradeEffect();
-  private grain = new GrainEffect();
-  private contrast = new BrightnessContrastEffect();
-  private saturation = new HueSaturationEffect();
-  private vignette = new VignetteEffect({ offset: 0.32, darkness: 0.3 });
+  private post: PostEffects = createPostEffects();
   private pmrem: THREE.PMREMGenerator;
   private envTarget: THREE.WebGLRenderTarget | null = null;
 
+  /** The can's pose: tilt and spin about its centre, lifted to rest on the floor. */
   private spinGroup = new THREE.Group();
+  private gizmo: TransformControls;
+  private gizmoProxy = new THREE.Object3D();
+  private gizmoDragging = false;
+  private reflectionClone: THREE.Object3D | null = null;
   private canGroup = new THREE.Group();
   private lidGroup = new THREE.Group();
   private reflection = new THREE.Group();
@@ -164,10 +117,13 @@ export class CanStage {
   private backgroundAspect = 0;
 
   private frames = 2;
+  /** A final render owns the renderer; the live loop pauses. */
+  private busy = false;
+  private warming: Promise<unknown> | null = null;
   private firstFrame = false;
   private disposed = false;
   private built = false;
-  private interaction: StageInteraction = "orbit";
+  private interaction: StageInteraction = "turn";
   private pointers = new Set<number>();
   private stroke: { id: number; x: number; y: number; last: THREE.Vector2 | null } | null = null;
   private raycaster = new THREE.Raycaster();
@@ -212,9 +168,7 @@ export class CanStage {
     this.dofPass = new EffectPass(this.camera, this.dof);
     this.dofPass.enabled = false;
     this.composer.addPass(this.dofPass);
-    this.bloom = new BloomEffect({ intensity: 0.4, luminanceThreshold: 0.82, luminanceSmoothing: 0.25, mipmapBlur: true, radius: 0.62 });
-    const tone = new ToneMappingEffect({ mode: ToneMappingMode.NEUTRAL });
-    this.composer.addPass(new EffectPass(this.camera, this.grade, this.bloom, tone, this.contrast, this.saturation, this.vignette, this.grain));
+    this.composer.addPass(new EffectPass(this.camera, ...postEffectList(this.post)));
 
     this.dropMaterial = new THREE.MeshPhysicalMaterial({
       color: "#ffffff",
@@ -269,6 +223,28 @@ export class CanStage {
     this.scene.add(this.keyLight, this.keyLight.target, this.ground, this.contact, this.reflection, this.spinGroup);
     this.spinGroup.add(this.canGroup);
 
+    // Red/green/blue rings: X and Z tilt the can, Y spins it around its own axis.
+    this.gizmo = new TransformControls(this.camera, canvas);
+    this.gizmo.setMode("rotate");
+    this.gizmo.setSpace("local");
+    this.gizmo.showE = false;
+    this.gizmo.showXYZE = false;
+    this.gizmo.size = 2.1;
+    this.gizmo.attach(this.gizmoProxy);
+    this.gizmo.enabled = false;
+    this.gizmo.getHelper().visible = false;
+    this.scene.add(this.gizmoProxy, this.gizmo.getHelper());
+    this.gizmo.addEventListener("dragging-changed", (event) => {
+      this.gizmoDragging = Boolean(event.value);
+      this.controls.enabled = !this.gizmoDragging;
+    });
+    this.gizmo.addEventListener("change", () => this.invalidate());
+    this.gizmo.addEventListener("objectChange", () => {
+      const e = new THREE.Euler().setFromQuaternion(this.gizmoProxy.quaternion, "XZY");
+      const deg = THREE.MathUtils.radToDeg;
+      this.onOrientationDrag?.({ pitch: deg(e.x), spin: (((deg(e.y) - this.turntableAngle) % 360) + 360) % 360, roll: deg(e.z) });
+    });
+
     this.bodyMaterial.map = this.bodyColor;
     this.bodyMaterial.roughnessMap = this.bodyOrm;
     this.bodyMaterial.metalnessMap = this.bodyOrm;
@@ -290,6 +266,8 @@ export class CanStage {
     this.renderer.setSize(width, height, false);
     this.composer.setSize(width, height);
     this.camera.aspect = width / height;
+    // Keep the rings around the can on small stages (phones) as well as large ones.
+    this.gizmo.size = 2.1 * Math.min(1, Math.min(width, height) / 760);
     this.applyViewOffset();
     this.refreshBackground();
     if (this.autoFrame && this.built) this.setCameraPreset(this.autoFrame, false);
@@ -307,11 +285,20 @@ export class CanStage {
 
   setInteraction(mode: StageInteraction) {
     this.interaction = mode;
-    const claimed = mode !== "orbit";
-    // One pointer goes to the tool; two fingers still orbit and zoom.
-    this.controls.mouseButtons.LEFT = claimed ? (null as unknown as THREE.MOUSE) : THREE.MOUSE.ROTATE;
-    this.controls.touches.ONE = claimed ? (null as unknown as THREE.TOUCH) : THREE.TOUCH.ROTATE;
-    this.canvas.style.cursor = mode === "orbit" ? "grab" : mode === "artwork" ? "ew-resize" : mode === "focus" ? "crosshair" : "none";
+    // One pointer always belongs to the can or the tool; the camera orbits with the
+    // right button or two fingers, and zooms with the wheel or a pinch.
+    this.controls.mouseButtons.LEFT = null as unknown as THREE.MOUSE;
+    this.controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
+    this.controls.touches.ONE = null as unknown as THREE.TOUCH;
+    this.controls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE;
+    this.canvas.style.cursor = mode === "turn" ? "grab" : mode === "artwork" ? "ew-resize" : mode === "focus" ? "crosshair" : "none";
+  }
+
+  /** Show the rotation gizmo on the can (the Camera tool). */
+  setGizmo(on: boolean) {
+    this.gizmo.enabled = on;
+    this.gizmo.getHelper().visible = on;
+    this.invalidate();
   }
 
   setTurntable(on: boolean) {
@@ -349,7 +336,7 @@ export class CanStage {
       this.refreshBackground();
     }
     if (!prev || prev.focalLength !== next.focalLength) this.applyLens(next.focalLength, !!prev);
-    this.spinGroup.rotation.y = THREE.MathUtils.degToRad(next.spin + this.turntableAngle);
+    this.applyPose();
     this.rebuildReflection();
     this.emitInfo();
     this.invalidate();
@@ -366,13 +353,14 @@ export class CanStage {
     };
     const a = angles[preset];
     this.autoFrame = preset;
-    const target = new THREE.Vector3(0, a.ty, 0);
+    // Follow the can when it is lifted or resting tilted.
+    const target = new THREE.Vector3(0, a.ty + (this.spinGroup.position.y - H / 2), 0);
     this.moveCamera(new THREE.Vector3().setFromSphericalCoords(a.dist, a.polar, a.az).add(target), target, animate);
   }
 
   /** Keep the camera's direction but frame the whole can again. */
   frameCan() {
-    const target = new THREE.Vector3(0, this.format.height * 0.5, 0);
+    const target = this.spinGroup.position.clone();
     const dir = this.camera.position.clone().sub(this.controls.target).normalize();
     this.moveCamera(target.clone().add(dir.multiplyScalar(this.fitDistance())), target, true);
   }
@@ -420,13 +408,13 @@ export class CanStage {
   /** Label top/bottom edges on screen, at the side of the can facing the camera. */
   labelScreenEdges(): { top: number; bottom: number; left: number; right: number } | null {
     const placement = this.placement;
-    if (!placement || this.settings?.artwork.mode !== "label") return null;
+    if (!placement) return null;
     const R = this.format.bodyDiameter / 2;
-    const toCamera = this.spinGroup.worldToLocal(this.camera.position.clone()).setY(0).normalize().multiplyScalar(R);
-    const top = this.project(toCamera.clone().setY(placement.bottom + placement.height));
-    const bottom = this.project(toCamera.clone().setY(placement.bottom));
-    const mid = this.project(new THREE.Vector3(0, placement.bottom, 0));
-    const side = this.project(this.sideways(new THREE.Vector3(0, placement.bottom, 0), R));
+    const toCamera = this.canGroup.worldToLocal(this.camera.position.clone()).setY(0).normalize().multiplyScalar(R);
+    const top = this.project(toCamera.clone().setY(placement.top));
+    const bottom = this.project(toCamera.clone().setY(placement.base));
+    const mid = this.project(new THREE.Vector3(0, placement.base, 0));
+    const side = this.project(this.sideways(new THREE.Vector3(0, placement.base, 0), R));
     const half = Math.abs(side.x - mid.x);
     return { top: top.y, bottom: bottom.y, left: mid.x - half, right: mid.x + half };
   }
@@ -440,12 +428,17 @@ export class CanStage {
 
   /** Render at an arbitrary resolution and return the encoded image. */
   async exportImage(options: ExportOptions): Promise<Blob> {
+    // A final render may hold the renderer for a moment (its plate and snapshot).
+    while (this.busy) await new Promise((r) => setTimeout(r, 30));
     const max = this.maxExportSize();
     const scale = Math.min(1, max / Math.max(options.width, options.height));
     const width = Math.round(options.width * scale);
     const height = Math.round(options.height * scale);
     const ratio = this.renderer.getPixelRatio();
     const background = this.scene.background;
+    const helper = this.gizmo.getHelper();
+    const gizmoVisible = helper.visible;
+    helper.visible = false;
 
     this.renderer.setPixelRatio(1);
     this.renderer.setSize(width, height, false);
@@ -464,6 +457,7 @@ export class CanStage {
     const blob = await new Promise<Blob | null>((resolve) => this.canvas.toBlob(resolve, options.type, options.quality ?? 0.95));
 
     this.scene.background = background;
+    helper.visible = gizmoVisible;
     this.renderer.setClearColor(0x000000, 1);
     this.renderer.setPixelRatio(ratio);
     this.resize(this.viewSize.x, this.viewSize.y);
@@ -472,6 +466,166 @@ export class CanStage {
     this.composer.render();
     if (!blob) throw new Error("The browser could not encode the image");
     return blob;
+  }
+
+  /**
+   * The hyper-realistic render: path traces the can at the export size and composites it
+   * over the backdrop, floor shadow and reflection, then applies the photographic finish.
+   */
+  async renderFinal(options: FinalRenderOptions): Promise<Blob> {
+    const settings = this.settings;
+    if (!settings || this.busy) throw new Error("The stage is not ready");
+    const max = this.maxExportSize();
+    const scale = Math.min(1, max / Math.max(options.width, options.height));
+    const width = Math.round(options.width * scale);
+    const height = Math.round(options.height * scale);
+    const fx = settings.effects;
+    const disposables: { dispose(): void }[] = [];
+
+    try {
+      // 1. On this thread: the plate (backdrop, floor shadow, reflection, water) and the
+      // water mask, plus a snapshot of the can and the lens for the worker.
+      const { plate, mask, request, transfer } = await this.atExportSize(width, height, options.transparent ?? false, async () => {
+        const plate = new THREE.WebGLRenderTarget(width, height, { type: THREE.HalfFloatType, samples: 4 });
+        this.renderer.setRenderTarget(plate);
+        this.renderer.clear();
+        this.renderer.render(this.scene, this.camera);
+        this.renderer.setRenderTarget(null);
+        // Water stays raster: path tracing tiny refractive beads needs thousands of
+        // samples to resolve their caustics. It is blended back in through a mask.
+        const mask = this.renderWaterMask(width, height);
+        const { snapshot, transfer } = await snapshotScene(this.spinGroup, new Set([this.dropMaterial, this.hazeMaterial]));
+        const photoSource = settings.lighting.matchBackground && settings.background.kind === "image" && settings.background.visible ? this.backgroundImage : null;
+        const photo = photoSource ? await createImageBitmap(photoSource) : null;
+        if (photo) transfer.push(photo);
+        const e = this.scene.environmentRotation;
+        const request = {
+          width,
+          height,
+          samples: options.samples,
+          scene: snapshot,
+          lighting: settings.lighting,
+          photo,
+          environmentRotation: [e.x, e.y, e.z] as [number, number, number],
+          camera: {
+            position: this.camera.position.toArray(),
+            quaternion: this.camera.quaternion.toArray(),
+            fov: this.camera.fov,
+            aspect: this.camera.aspect,
+            near: this.camera.near,
+            far: this.camera.far
+          },
+          fStop: fx.dofEnabled ? fx.aperture : null,
+          focusDistance: this.camera.position.distanceTo(this.dof.target ?? this.spinGroup.position)
+        };
+        return { plate, mask, request, transfer };
+      });
+      disposables.push(plate);
+      if (mask) disposables.push(mask);
+
+      // 2. In the worker: the can, path traced. The live view keeps running meanwhile.
+      const traced = await traceInWorker(request, transfer, { onStage: options.onStage, onProgress: options.onProgress, signal: options.signal });
+      const tracedTexture = new THREE.DataTexture(traced.pixels, traced.width, traced.height, THREE.RGBAFormat, THREE.HalfFloatType);
+      tracedTexture.needsUpdate = true;
+      disposables.push(tracedTexture);
+
+      // 3. Back here: composite, finish and encode.
+      return await this.atExportSize(width, height, options.transparent ?? false, async () => {
+        compositeAndFinish(this.renderer, plate.texture, tracedTexture, mask?.texture ?? null, fx);
+        const blob = await new Promise<Blob | null>((resolve) => this.canvas.toBlob(resolve, options.type, options.quality ?? 0.95));
+        if (!blob) throw new Error("The browser could not encode the image");
+        return blob;
+      });
+    } finally {
+      for (const d of disposables) d.dispose();
+    }
+  }
+
+  /**
+   * Compile the photoreal renderer in the background (in the worker) so the next final
+   * render starts tracing sooner. Safe to call repeatedly; failures are ignored.
+   */
+  warmFinalRender() {
+    if (this.warming || this.busy) return;
+    this.warming = this.renderFinal({ width: 96, height: 120, type: "image/png", samples: 1 })
+      .catch(() => undefined)
+      .finally(() => (this.warming = null));
+  }
+
+  /**
+   * Run `work` with the renderer sized for an export and the live loop paused, then put
+   * the live view back however `work` ends.
+   */
+  private async atExportSize<T>(width: number, height: number, transparent: boolean, work: () => Promise<T>): Promise<T> {
+    this.busy = true;
+    const ratio = this.renderer.getPixelRatio();
+    const background = this.scene.background;
+    const helper = this.gizmo.getHelper();
+    const gizmoVisible = helper.visible;
+    try {
+      helper.visible = false;
+      this.renderer.setPixelRatio(1);
+      this.renderer.setSize(width, height, false);
+      this.camera.aspect = width / height;
+      this.camera.clearViewOffset();
+      this.camera.updateProjectionMatrix();
+      this.droplets?.render();
+      this.orientLights();
+      this.updateFocus();
+      if (transparent) {
+        this.scene.background = null;
+        this.renderer.setClearColor(0x000000, 0);
+      } else {
+        this.paintBackgroundTexture(width / height);
+      }
+      return await work();
+    } finally {
+      this.scene.background = background;
+      helper.visible = gizmoVisible;
+      this.renderer.setRenderTarget(null);
+      this.renderer.setClearColor(0x000000, 1);
+      this.renderer.setPixelRatio(ratio);
+      this.busy = false;
+      this.resize(this.viewSize.x, this.viewSize.y);
+      this.backgroundAspect = 0;
+      this.refreshBackground();
+      this.invalidate(3);
+    }
+  }
+
+  /**
+   * Where the water is, as seen by the camera: white where droplets cover the can, grey
+   * by the condensation's opacity, black elsewhere (including where the can hides it).
+   */
+  private renderWaterMask(width: number, height: number): THREE.WebGLRenderTarget | null {
+    const water = this.settings?.water;
+    const field = this.droplets;
+    if (!field || !water || (field.count === 0 && water.haze <= 0)) return null;
+    const target = new THREE.WebGLRenderTarget(width, height, { samples: 4 });
+    const black = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const drops = new THREE.MeshBasicMaterial({ color: 0xffffff, alphaMap: field.coverageTexture, transparent: true, depthWrite: false });
+    const haze = new THREE.MeshBasicMaterial({ color: 0xffffff, alphaMap: field.hazeTexture, transparent: true, depthWrite: false, opacity: this.hazeMaterial.opacity });
+    const swapped: [THREE.Mesh, THREE.Material | THREE.Material[]][] = [];
+    this.spinGroup.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      swapped.push([mesh, mesh.material]);
+      mesh.material = mesh.material === this.dropMaterial ? drops : mesh.material === this.hazeMaterial ? haze : black;
+    });
+    const hidden = [this.ground, this.contact, this.reflection].filter((o) => o.visible);
+    for (const o of hidden) o.visible = false;
+    const background = this.scene.background;
+    this.scene.background = null;
+    this.renderer.setClearColor(0x000000, 1);
+    this.renderer.setRenderTarget(target);
+    this.renderer.clear();
+    this.renderer.render(this.scene, this.camera);
+    this.renderer.setRenderTarget(null);
+    this.scene.background = background;
+    for (const o of hidden) o.visible = true;
+    for (const [mesh, material] of swapped) mesh.material = material;
+    for (const m of [black, drops, haze]) m.dispose();
+    return target;
   }
 
   maxExportSize() {
@@ -492,19 +646,21 @@ export class CanStage {
     this.composer.dispose();
     this.pmrem.dispose();
     this.envTarget?.dispose();
+    stopTraceWorker();
     this.renderer.dispose();
   }
 
   // ---------------------------------------------------------------------------
 
   private tick = () => {
+    if (this.busy) return;
     const now = performance.now();
     const dt = Math.min(0.1, (now - this.lastTime) / 1000);
     this.lastTime = now;
     if (this.controls.update()) this.frames = Math.max(this.frames, 1);
     if (this.turntable && !this.pointers.size) {
       this.turntableAngle = (this.turntableAngle + dt * 18) % 360;
-      this.spinGroup.rotation.y = THREE.MathUtils.degToRad((this.settings?.spin ?? 0) + this.turntableAngle);
+      this.applyPose();
       this.frames = Math.max(this.frames, 1);
     }
     const water = this.settings?.water;
@@ -528,14 +684,14 @@ export class CanStage {
   };
 
   private project(point: THREE.Vector3): THREE.Vector2 {
-    const p = this.spinGroup.localToWorld(point.clone()).project(this.camera);
+    const p = this.canGroup.localToWorld(point.clone()).project(this.camera);
     return new THREE.Vector2(((p.x + 1) / 2) * this.viewSize.x, ((1 - p.y) / 2) * this.viewSize.y);
   }
 
   /** A point offset sideways from `at`, perpendicular to the view, in spin-group space. */
   private sideways(at: THREE.Vector3, distance: number) {
     const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0).setY(0).normalize();
-    right.applyQuaternion(this.spinGroup.quaternion.clone().invert());
+    right.applyQuaternion(this.canGroup.getWorldQuaternion(new THREE.Quaternion()).invert());
     return at.clone().add(right.multiplyScalar(distance));
   }
 
@@ -556,9 +712,10 @@ export class CanStage {
       this.dof.target = new THREE.Vector3(...fx.focusPoint);
       return;
     }
-    const toCamera = this.camera.position.clone().setY(0).normalize();
+    const toCamera = this.camera.position.clone().sub(this.spinGroup.position).setY(0).normalize();
     const R = this.format.bodyDiameter / 2;
-    this.dof.target = fx.focus === "lid" ? new THREE.Vector3(0, H, 0).addScaledVector(toCamera, R * 0.3) : new THREE.Vector3(0, H * 0.5, 0).addScaledVector(toCamera, R);
+    const lid = this.canGroup.localToWorld(new THREE.Vector3(0, H, 0));
+    this.dof.target = fx.focus === "lid" ? lid.addScaledVector(toCamera, R * 0.3) : this.spinGroup.position.clone().addScaledVector(toCamera, R);
   }
 
   /** Lights are set relative to the camera; turn them with it. */
@@ -755,7 +912,8 @@ export class CanStage {
       this.labelMesh.geometry.dispose();
       this.labelMesh = null;
     }
-    if (image && this.placement && settings.artwork.mode === "label") {
+    const sticker = settings.artwork.mode === "sticker";
+    if (image && this.placement && settings.artwork.mode !== "printed") {
       const R = this.profiles.landmarks.radius + 0.02;
       const z0 = this.placement.bottom;
       const z1 = z0 + this.placement.height;
@@ -791,7 +949,10 @@ export class CanStage {
         clearcoatRoughness: stock.clearcoatRoughness,
         sheen: paper ? 0.25 : 0,
         sheenRoughness: 0.8,
-        side: THREE.DoubleSide
+        side: THREE.DoubleSide,
+        // Stickers are die-cut with rounded corners.
+        alphaMap: sticker ? stickerMask((this.placement.wrap * Math.PI * this.format.bodyDiameter) / this.placement.height) : null,
+        alphaTest: sticker ? 0.5 : 0
       });
       this.labelMaterial.needsUpdate = true;
       this.labelMesh = new THREE.Mesh(geometry, this.labelMaterial);
@@ -831,8 +992,13 @@ export class CanStage {
     this.scene.environment = next.texture;
 
     this.keyDirection = lightDirection(lighting.azimuth, lighting.elevation);
-    this.keyLight.color.copy(kelvinToColor(lighting.temperature));
-    this.keyLight.intensity = 0.9 * lighting.intensity * (lighting.environment === "daylight" || lighting.environment === "golden" ? 2.2 : 1);
+    // The shadow-casting light matches the key panel in the environment: the same gentle
+    // tint as environment.ts's keyColor (a camera is white-balanced near its key), and a
+    // strength by how hard each setup's key is.
+    const tint = new THREE.Color(1, 1, 1).lerp(kelvinToColor(lighting.temperature), 0.42);
+    this.keyLight.color.copy(tint).multiplyScalar(1 / (0.2126 * tint.r + 0.7152 * tint.g + 0.0722 * tint.b));
+    const keyStrength = { softbox: 0.9, hard: 1.3, daylight: 1.4, golden: 1.9, bar: 0.8, overcast: 0.45 };
+    this.keyLight.intensity = keyStrength[lighting.environment] * lighting.intensity;
     this.dropCaustic.value = 0.32 * lighting.intensity * (lighting.environment === "hard" ? 1.3 : 1);
     this.applyShadowSoftness();
     this.orientLights();
@@ -862,16 +1028,7 @@ export class CanStage {
     this.dof.bokehScale = 1 + shallow * 6;
     this.dof.cocMaterial.focusRange = THREE.MathUtils.lerp(260, 25, shallow);
     this.updateFocus();
-    this.bloom.intensity = fx.bloomEnabled ? fx.bloom * 1.6 : 0;
-    this.bloom.luminanceMaterial.threshold = 0.4 + fx.bloomThreshold * 0.55;
-    this.vignette.darkness = fx.vignetteEnabled ? fx.vignette * 0.75 : 0;
-    this.grain.uniforms.get("amount")!.value = fx.grainEnabled ? fx.grain : 0;
-    this.grain.uniforms.get("grainSize")!.value = 1 + fx.grainSize * 2.5;
-    const grade = fx.gradeEnabled;
-    this.grade.uniforms.get("exposure")!.value = grade ? Math.pow(2, fx.exposure) : 1;
-    this.grade.uniforms.get("warmth")!.value = grade ? fx.warmth : 0;
-    this.contrast.contrast = grade ? fx.contrast * 0.5 : 0;
-    this.saturation.saturation = grade ? fx.saturation * (fx.saturation < 0 ? 1 : 0.6) : 0;
+    configurePost(this.post, fx);
     const ground = fx.groundEnabled;
     this.ground.material.opacity = fx.shadow * 0.62;
     this.contact.material.opacity = fx.shadow;
@@ -898,14 +1055,45 @@ export class CanStage {
     this.invalidate();
   }
 
+  /**
+   * Tilt and spin about the can's centre (Euler XZY: spin first, around the can's own
+   * axis), then lift it so its lowest point rests on the floor, plus any float.
+   */
+  private applyPose() {
+    const s = this.settings;
+    if (!s) return;
+    const rad = THREE.MathUtils.degToRad;
+    const H = this.format.height;
+    const R = this.format.bodyDiameter / 2;
+    this.canGroup.position.y = -H / 2;
+    this.spinGroup.rotation.set(rad(s.tilt.pitch), rad(s.spin + this.turntableAngle), rad(s.tilt.roll), "XZY");
+    const axis = new THREE.Vector3(0, 1, 0).applyQuaternion(this.spinGroup.quaternion);
+    const rest = (H / 2) * Math.abs(axis.y) + R * Math.sqrt(Math.max(0, 1 - axis.y * axis.y));
+    this.spinGroup.position.set(0, rest + s.lift, 0);
+    this.spinGroup.updateMatrixWorld(true);
+    // The baked contact shadow only fits an upright can standing on the floor.
+    const upright = Math.abs(axis.y) > 0.999 && s.lift < 0.5;
+    this.contact.visible = upright && this.ground.visible;
+    if (this.reflectionClone) {
+      this.reflectionClone.position.copy(this.spinGroup.position);
+      this.reflectionClone.quaternion.copy(this.spinGroup.quaternion);
+    }
+    if (!this.gizmoDragging) {
+      this.gizmoProxy.position.copy(this.spinGroup.position);
+      this.gizmoProxy.quaternion.copy(this.spinGroup.quaternion);
+    }
+  }
+
   /** Mirror the can under the floor for glossy-surface shots, fading with depth. */
   private rebuildReflection() {
     for (const child of [...this.reflection.children]) this.reflection.remove(child);
+    this.reflectionClone = null;
     const fx = this.settings?.effects;
     const strength = fx && fx.groundEnabled ? fx.reflection : 0;
     if (strength <= 0.001) return;
     const fade = this.format.height * (0.15 + (1 - (fx?.reflectionFade ?? 0.5)) * 0.6);
     const clone = this.spinGroup.clone(true);
+    this.reflectionClone = clone;
     clone.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -932,7 +1120,7 @@ export class CanStage {
       mesh.castShadow = false;
       mesh.receiveShadow = false;
     });
-    clone.scale.y = -1;
+    this.reflection.scale.y = -1;
     this.reflection.add(clone);
   }
 
@@ -968,7 +1156,9 @@ export class CanStage {
       this.endStroke();
       return;
     }
-    if (this.interaction === "orbit") return;
+    if (event.button !== 0 && event.pointerType === "mouse") return;
+    // The rotation gizmo got there first.
+    if (this.gizmoDragging || (this.gizmo.enabled && this.gizmo.axis !== null)) return;
     if (this.interaction === "focus") {
       const hit = this.hit(event, [this.canGroup]);
       if (hit) this.onFocusPicked?.([hit.point.x, hit.point.y, hit.point.z]);
@@ -982,6 +1172,12 @@ export class CanStage {
   private onPointerMove = (event: PointerEvent) => {
     const stroke = this.stroke;
     if (!stroke || event.pointerId !== stroke.id) return;
+    if (this.interaction === "turn") {
+      this.turnCan(event.clientX - stroke.x, event.clientY - stroke.y);
+      stroke.x = event.clientX;
+      stroke.y = event.clientY;
+      return;
+    }
     if (this.interaction === "artwork") {
       const dx = event.clientX - stroke.x;
       const dy = event.clientY - stroke.y;
@@ -1003,8 +1199,23 @@ export class CanStage {
   };
 
   private onDoubleClick = () => {
-    if (this.interaction === "orbit") this.frameCan();
+    if (this.interaction === "turn") this.frameCan();
   };
+
+  /**
+   * Drag to turn the can: sideways spins it around its own axis, up and down tips it
+   * towards or away from the camera.
+   */
+  private turnCan(dx: number, dy: number) {
+    const q = this.spinGroup.quaternion.clone();
+    const spin = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(dx * 0.5));
+    const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0).setY(0).normalize();
+    const tip = new THREE.Quaternion().setFromAxisAngle(right, THREE.MathUtils.degToRad(dy * 0.4));
+    q.multiply(spin).premultiply(tip);
+    const e = new THREE.Euler().setFromQuaternion(q, "XZY");
+    const deg = THREE.MathUtils.radToDeg;
+    this.onOrientationDrag?.({ pitch: deg(e.x), spin: (((deg(e.y) - this.turntableAngle) % 360) + 360) % 360, roll: deg(e.z) });
+  }
 
   private endStroke() {
     if (!this.stroke) return;
@@ -1030,6 +1241,29 @@ export class CanStage {
     }
     if (water.tool === "erase") field.wipe(point.x, point.y, radius);
   }
+}
+
+let stickerMaskCache: { aspect: number; texture: THREE.CanvasTexture } | null = null;
+
+/** Rounded-rectangle mask for a sticker of the given width/height ratio. */
+function stickerMask(aspect: number): THREE.CanvasTexture {
+  if (stickerMaskCache && Math.abs(stickerMaskCache.aspect - aspect) < 0.01) return stickerMaskCache.texture;
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = Math.max(32, Math.round(512 / aspect));
+  const ctx = canvas.getContext("2d")!;
+  const radius = Math.min(canvas.width, canvas.height) * 0.08;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.roundRect(0, 0, canvas.width, canvas.height, radius);
+  ctx.fill();
+  stickerMaskCache?.texture.dispose();
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.NoColorSpace;
+  stickerMaskCache = { aspect, texture };
+  return texture;
 }
 
 function contactTexture(): THREE.CanvasTexture {

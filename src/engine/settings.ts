@@ -3,7 +3,10 @@
 
 export type ColorPreset = "silver" | "gold" | "black" | "white" | "custom";
 export type Finish = "gloss" | "satin" | "matte" | "brushed";
-export type ArtworkMode = "printed" | "label";
+/** Printed: ink on the metal from the lip to the foot. Label: on the flat barrel. Sticker: a patch. */
+export type ArtworkMode = "printed" | "label" | "sticker";
+/** How the artwork's width is set: stretched round the can, or from its proportions. */
+export type ArtworkFit = "auto" | "wrap" | "aspect";
 export type InkMode = "opaque" | "translucent";
 export type LabelStock = "paper" | "film";
 export type EnvironmentPreset = "softbox" | "hard" | "daylight" | "golden" | "bar" | "overcast";
@@ -31,12 +34,10 @@ export interface ArtworkSettings {
   mode: ArtworkMode;
   ink: InkMode;
   labelStock: LabelStock;
-  /** Label only: fraction of the circumference covered; null wraps the whole can. */
-  wrap: number | null;
-  /** Artwork height in mm; null infers it from the image and the can's template. */
-  height: number | null;
-  /** Vertical shift in mm from the default placement. */
-  offset: number;
+  fit: ArtworkFit;
+  /** Top and bottom edges in mm above the foot; null uses the mode's default area. */
+  top: number | null;
+  bottom: number | null;
   /** Rotation of the artwork around the can, degrees. */
   rotation: number;
 }
@@ -133,8 +134,12 @@ export interface CanSettings {
   water: WaterSettings;
   effects: EffectSettings;
   background: BackgroundSettings;
-  /** Degrees; spins the can on its own axis. */
+  /** Degrees; spins the can on its own axis (applies after the tilt). */
   spin: number;
+  /** Degrees; tips the can towards/away from the camera (pitch) and sideways (roll). */
+  tilt: { pitch: number; roll: number };
+  /** mm above the floor; 0 rests the can on its lowest edge. */
+  lift: number;
   /** Lens focal length in mm (full-frame equivalent). */
   focalLength: number;
 }
@@ -144,7 +149,7 @@ export const DEFAULT_SETTINGS: CanSettings = {
   body: { preset: "silver", color: "#c8102e", metallic: false, finish: "gloss" },
   lid: { preset: "silver", color: "#1a1a1a", metallic: true, finish: "brushed" },
   lidRotation: 0,
-  artwork: { url: null, name: null, mode: "printed", ink: "opaque", labelStock: "paper", wrap: null, height: null, offset: 0, rotation: 0 },
+  artwork: { url: null, name: null, mode: "printed", ink: "opaque", labelStock: "paper", fit: "auto", top: null, bottom: null, rotation: 0 },
   lighting: {
     azimuth: -40,
     elevation: 30,
@@ -186,6 +191,8 @@ export const DEFAULT_SETTINGS: CanSettings = {
   },
   background: { kind: "studio", color: "#34373c", color2: "#0f1012", angle: 180, imageUrl: null, fit: "fill", blur: 0, visible: true },
   spin: 0,
+  tilt: { pitch: 0, roll: 0 },
+  lift: 0,
   focalLength: 70
 };
 

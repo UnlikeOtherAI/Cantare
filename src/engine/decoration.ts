@@ -11,13 +11,29 @@ import { arcAtHeight, type CanLandmarks, type ProfilePoint } from "./profile";
 import type { ArtworkSettings, Finish } from "./settings";
 
 export interface ArtworkPlacement {
-  /** Printed: arc length (mm) of the bottom edge. Label: height (mm) of the bottom edge. */
+  /** Printed: arc length (mm) of the bottom edge. Label/sticker: height (mm) of the bottom edge. */
   bottom: number;
+  /** Printed: arc length (mm). Label/sticker: height (mm). */
   height: number;
   /** Fraction of the circumference the artwork covers; 1 = full wrap. */
   wrap: number;
-  /** True when the size came from the supplier template rather than the image. */
+  /** Edges in mm above the foot, as the sliders show them. */
+  top: number;
+  base: number;
+  /** Where the edges may go for this mode. */
+  range: { low: number; high: number };
+  /** True when the image matches the supplier's print template for this can. */
   fromTemplate: boolean;
+  /** True when the width was stretched round the can rather than kept in proportion. */
+  stretched: boolean;
+}
+
+/** Below this mismatch, "auto" stretches artwork round the can instead of leaving a gap. */
+const AUTO_STRETCH = 0.12;
+
+export function artworkRange(mode: ArtworkSettings["mode"], landmarks: CanLandmarks) {
+  // Printed ink runs from the foot to the lip; labels and stickers only fit the flat barrel.
+  return mode === "printed" ? { low: 0, high: landmarks.neckTop - 0.2 } : { low: landmarks.heelTop + 0.5, high: landmarks.shoulderStart - 0.5 };
 }
 
 export function placeArtwork(
@@ -29,34 +45,27 @@ export function placeArtwork(
   settings: ArtworkSettings
 ): ArtworkPlacement {
   const circumference = Math.PI * format.bodyDiameter;
-  let low: number;
-  let high: number;
-  if (settings.mode === "printed") {
-    low = arcAtHeight(body, arcs, 1.2);
-    high = arcAtHeight(body, arcs, landmarks.neckTop - 0.3);
-  } else {
-    low = landmarks.heelTop + 1;
-    high = landmarks.shoulderStart - 1;
-  }
-  const available = high - low;
+  const range = artworkRange(settings.mode, landmarks);
+  const span = range.high - range.low;
+  const sticker = settings.mode === "sticker";
+  // Stickers default to a centred patch half the barrel tall.
+  const defaultBottom = sticker ? range.low + span * 0.25 : range.low;
+  const defaultTop = sticker ? range.high - span * 0.25 : range.high;
+  const base = Math.min(range.high - 4, Math.max(range.low, settings.bottom ?? defaultBottom));
+  const top = Math.min(range.high, Math.max(base + 4, settings.top ?? defaultTop));
 
-  let height: number;
-  let fromTemplate = false;
+  const printed = settings.mode === "printed";
+  const bottom = printed ? arcAtHeight(body, arcs, base) : base;
+  const height = printed ? arcAtHeight(body, arcs, top) - bottom : top - base;
+
+  const proportional = height * aspect;
+  const mismatch = Math.abs(proportional / circumference - 1);
+  const fit = settings.fit === "auto" ? (sticker || mismatch > AUTO_STRETCH ? "aspect" : "wrap") : settings.fit;
+  const width = fit === "wrap" ? circumference : Math.min(circumference, proportional);
+
   const template = format.artwork;
-  if (settings.height != null) {
-    height = settings.height;
-  } else if (settings.mode === "printed" && template && Math.abs(aspect - template.width / template.height) / (template.width / template.height) < 0.06) {
-    height = template.height;
-    fromTemplate = true;
-  } else if (settings.mode === "label" && settings.wrap != null) {
-    height = (circumference * settings.wrap) / aspect;
-  } else {
-    height = circumference / aspect;
-  }
-  height = Math.min(height, available);
-  const wrap = Math.min(1, settings.mode === "label" && settings.wrap != null ? settings.wrap : (height * aspect) / circumference);
-  const bottom = Math.min(high - height, Math.max(low, low + (available - height) / 2 + settings.offset));
-  return { bottom, height, wrap, fromTemplate };
+  const fromTemplate = Boolean(printed && template && Math.abs(aspect - template.width / template.height) / (template.width / template.height) < 0.06);
+  return { bottom, height, wrap: width / circumference, top, base, range, fromTemplate, stretched: fit === "wrap" && mismatch > 0.005 };
 }
 
 export interface BodyTextures {

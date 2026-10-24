@@ -97,10 +97,11 @@ on desktop they are one 32 px row (label 96 · track · value 56).
 
 | Input | Pointer | Touch |
 |---|---|---|
-| Orbit | drag | one finger |
+| Turn the can (spin on its axis, tip back/forward) | drag | one finger |
+| Orbit the camera | right-drag | two fingers |
 | Zoom | wheel / pinch on trackpad | pinch |
-| Pan | shift-drag or middle-drag | two-finger drag |
-| Spin can | drag the Spin button horizontally | — (use Camera panel dial) |
+| Tilt any way | red/blue rings of the gizmo (Camera tool) | same |
+| Spin can | green ring, or drag the Spin button horizontally | green ring, or the Camera panel dial |
 
 When a tool claims the stage (water brush/spray, artwork drag, light handle) a one-finger drag goes to
 the tool; **two fingers always orbit**. Quick-angle chips animate the camera over 320 ms. Double-tap

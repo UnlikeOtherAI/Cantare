@@ -1,5 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 
+// CI has no GPU: keep exports on the quick path so a photoreal warm-up does not hog the CPU.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("cantare.exportMode", "quick"));
+});
+
 async function ready(page: Page) {
   await page.goto("/");
   await expect(page.locator(".splash")).toHaveCount(0, { timeout: 60_000 });
@@ -76,4 +81,26 @@ test("water preset and haze apply", async ({ page }) => {
   await openTool(page, "Water");
   await page.getByRole("button", { name: "Ice cold" }).click();
   await expect(page.getByRole("button", { name: "Ice cold" })).toHaveClass(/is-active/);
+});
+
+test("the can tilts and stands back up from the Camera tool", async ({ page }) => {
+  await ready(page);
+  await openTool(page, "Camera");
+  const pitch = page.getByLabel("Tilt back / forward").last();
+  await pitch.fill("35");
+  await pitch.press("Enter");
+  await expect(page.getByRole("button", { name: "Stand the can upright" })).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { __editor: { getState(): { settings: { tilt: { pitch: number } } } } }).__editor.getState().settings.tilt.pitch)).toBe(35);
+  await page.getByRole("button", { name: "Stand the can upright" }).click();
+  await expect(page.getByRole("button", { name: "Stand the can upright" })).toHaveCount(0);
+});
+
+test("artwork can be a sticker on the flat part of the can", async ({ page }) => {
+  await ready(page);
+  await page.getByRole("button", { name: "Try a sample" }).click();
+  await openTool(page, "Artwork");
+  await page.getByRole("radio", { name: "Sticker" }).click();
+  await expect(page.getByText("die-cut patch")).toBeVisible();
+  await expect(page.getByLabel("Top edge").last()).toBeVisible();
+  await expect(page.locator(".label-handles")).toBeVisible();
 });

@@ -5,7 +5,7 @@ import type { CameraPreset } from "../engine/settings";
 export type Tool = "can" | "colour" | "artwork" | "light" | "water" | "camera" | "effects" | "background";
 export const TOOLS: Tool[] = ["can", "colour", "artwork", "light", "water", "camera", "effects", "background"];
 export type Sheet = "peek" | "half" | "full";
-export type Dialog = "export" | "gallery" | null;
+export type Dialog = "export" | "gallery" | "setups" | "save-setup" | null;
 export type BackgroundSource = "generate" | "upload" | "colour";
 export type GenerationState = { status: "idle" } | { status: "generating"; startedAt: number } | { status: "error"; message: string };
 

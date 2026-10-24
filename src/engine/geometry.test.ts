@@ -50,38 +50,57 @@ describe("artwork placement", () => {
   const format = getFormat("eu-std-440");
   const profiles = buildProfiles(format);
   const arcs = arcLengths(profiles.body);
+  const { landmarks } = profiles;
+  const C = Math.PI * format.bodyDiameter;
   const place = (aspect: number, patch: Partial<typeof DEFAULT_SETTINGS.artwork> = {}) =>
-    placeArtwork(format, profiles.landmarks, profiles.body, arcs, aspect, { ...DEFAULT_SETTINGS.artwork, ...patch });
+    placeArtwork(format, landmarks, profiles.body, arcs, aspect, { ...DEFAULT_SETTINGS.artwork, ...patch });
 
-  it("uses the supplier template when the artwork matches it", () => {
-    const p = place(206 / 141.4);
-    expect(p.fromTemplate).toBe(true);
-    expect(p.height).toBeCloseTo(141.4);
-    expect(p.wrap).toBeCloseTo(1, 1);
+  it("prints from the foot to the lip by default", () => {
+    const p = place(1.5);
+    expect(p.base).toBe(0);
+    expect(p.top).toBeCloseTo(landmarks.neckTop - 0.2, 5);
+    expect(p.bottom).toBe(0);
+    expect(p.height).toBeGreaterThan(p.top - p.base);
   });
 
-  it("infers height from a full-wrap image", () => {
-    const p = place(3);
-    expect(p.fromTemplate).toBe(false);
-    expect(p.height).toBeCloseTo((Math.PI * format.bodyDiameter) / 3, 3);
-    expect(p.wrap).toBeCloseTo(1, 5);
+  it("stretches near-fitting printed artwork all round, and keeps proportions otherwise", () => {
+    const fullHeightArc = place(1).height;
+    expect(place(C / fullHeightArc * 1.05).wrap).toBe(1);
+    expect(place(C / fullHeightArc * 1.05).stretched).toBe(true);
+    const narrow = place(0.8);
+    expect(narrow.wrap).toBeLessThan(1);
+    expect(narrow.wrap).toBeCloseTo((narrow.height * 0.8) / C, 5);
   });
 
-  it("turns a tall image into a front panel rather than overflowing", () => {
-    const p = place(0.8);
-    expect(p.wrap).toBeLessThan(1);
-    expect(p.bottom + p.height).toBeLessThanOrEqual(arcs[arcs.length - 1]);
+  it("recognises the supplier template", () => {
+    expect(place(206 / 141.4).fromTemplate).toBe(true);
+    expect(place(3).fromTemplate).toBe(false);
   });
 
-  it("keeps labels on the straight barrel", () => {
+  it("keeps labels on the flat barrel", () => {
     const p = place(4, { mode: "label" });
-    expect(p.bottom).toBeGreaterThanOrEqual(profiles.landmarks.heelTop);
-    expect(p.bottom + p.height).toBeLessThanOrEqual(profiles.landmarks.shoulderStart);
+    expect(p.base).toBeGreaterThanOrEqual(landmarks.heelTop);
+    expect(p.top).toBeLessThanOrEqual(landmarks.shoulderStart);
+    expect(p.bottom).toBe(p.base);
   });
 
-  it("honours a manual height and offset within bounds", () => {
-    const p = place(3, { height: 60, offset: 500 });
-    expect(p.height).toBe(60);
-    expect(p.bottom + p.height).toBeLessThanOrEqual(arcs[arcs.length - 1]);
+  it("sizes stickers from the image as a centred patch", () => {
+    const p = place(1.5, { mode: "sticker" });
+    expect(p.wrap).toBeCloseTo(((p.top - p.base) * 1.5) / C, 5);
+    expect(p.base).toBeGreaterThan(p.range.low);
+    expect(p.top).toBeLessThan(p.range.high);
+  });
+
+  it("clamps manual edges to the mode's area and keeps them apart", () => {
+    const p = place(3, { mode: "label", top: 500, bottom: -20 });
+    expect(p.top).toBeLessThanOrEqual(p.range.high);
+    expect(p.base).toBeGreaterThanOrEqual(p.range.low);
+    const q = place(3, { mode: "label", top: 50, bottom: 50 });
+    expect(q.top - q.base).toBeGreaterThanOrEqual(4);
+  });
+
+  it("honours an explicit fit", () => {
+    expect(place(3, { fit: "wrap" }).wrap).toBe(1);
+    expect(place(0.5, { fit: "aspect", mode: "label" }).wrap).toBeLessThan(1);
   });
 });

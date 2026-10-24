@@ -12,20 +12,25 @@ export interface SurfaceSpec {
 }
 
 // Metals are tinted aluminium (colour is the reflectance tint); the others are paint.
-// Starting values follow docs/can-reference.md section 10.
+// Starting values follow docs/can-reference.md section 10. Silver is bare aluminium's
+// reflectance, slightly below pure white so highlights still have somewhere to go; gold
+// is a warm champagne lacquer over it rather than brass.
 const PRESETS = {
-  silver: { color: "#eef0f2", metal: true },
-  gold: { color: "#e9c27c", metal: true },
+  silver: { color: "#e8eaec", metal: true },
+  gold: { color: "#ecc98c", metal: true },
   black: { color: "#0e0e10", metal: false },
   white: { color: "#f3f3f0", metal: false }
 } as const;
 
+// Can aluminium is drawn metal under a clear lacquer: the metal itself is fairly rough,
+// so reflections of the set blur into soft gradients, and the lacquer on top gives the
+// crisp specular edge. Paint and ink keep a glossier dielectric response.
 const FINISH: Record<Finish, { metal: [number, number, number]; paint: [number, number, number]; anisotropy: number }> = {
   // [roughness, clearcoat, clearcoatRoughness]
-  gloss: { metal: [0.17, 0.7, 0.04], paint: [0.32, 1, 0.035], anisotropy: 0 },
-  satin: { metal: [0.26, 0.35, 0.22], paint: [0.48, 0.5, 0.22], anisotropy: 0 },
-  matte: { metal: [0.46, 0, 0.5], paint: [0.78, 0, 0.5], anisotropy: 0 },
-  brushed: { metal: [0.3, 0.25, 0.1], paint: [0.45, 0.6, 0.1], anisotropy: 0.75 }
+  gloss: { metal: [0.27, 0.85, 0.06], paint: [0.32, 1, 0.035], anisotropy: 0 },
+  satin: { metal: [0.36, 0.4, 0.22], paint: [0.48, 0.5, 0.22], anisotropy: 0 },
+  matte: { metal: [0.52, 0, 0.5], paint: [0.78, 0, 0.5], anisotropy: 0 },
+  brushed: { metal: [0.36, 0.3, 0.1], paint: [0.45, 0.6, 0.1], anisotropy: 0.75 }
 };
 
 export function surfaceSpec(part: PartAppearance): SurfaceSpec {
