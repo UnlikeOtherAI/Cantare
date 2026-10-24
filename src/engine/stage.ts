@@ -12,7 +12,10 @@ import { lidNormalMap, rivetGeometry, tabGeometry } from "./lidDetail";
 import { applySurface, finishValues, surfaceSpec } from "./materials";
 import { arcAtHeight, arcLengths, buildProfiles, type CanProfiles } from "./profile";
 import type { CameraPreset, CanSettings } from "./settings";
-import { captureEnvironment, compositeAndFinish, disposeTracer, pathTrace, type TraceStage } from "./finalRender";
+import { compositeAndFinish } from "./finalComposite";
+import type { TraceStage } from "./finalRender";
+import { stopTraceWorker, traceInWorker } from "./traceClient";
+import { snapshotScene } from "./traceScene";
 import { loadImage } from "./textures";
 
 export interface StageInfo {
@@ -116,6 +119,7 @@ export class CanStage {
   private frames = 2;
   /** A final render owns the renderer; the live loop pauses. */
   private busy = false;
+  private warming: Promise<unknown> | null = null;
   private firstFrame = false;
   private disposed = false;
   private built = false;
@@ -422,6 +426,8 @@ export class CanStage {
 
   /** Render at an arbitrary resolution and return the encoded image. */
   async exportImage(options: ExportOptions): Promise<Blob> {
+    // A final render may hold the renderer for a moment (its plate and snapshot).
+    while (this.busy) await new Promise((r) => setTimeout(r, 30));
     const max = this.maxExportSize();
     const scale = Math.min(1, max / Math.max(options.width, options.height));
     const width = Math.round(options.width * scale);
@@ -467,22 +473,93 @@ export class CanStage {
   async renderFinal(options: FinalRenderOptions): Promise<Blob> {
     const settings = this.settings;
     if (!settings || this.busy) throw new Error("The stage is not ready");
-    this.busy = true;
     const max = this.maxExportSize();
     const scale = Math.min(1, max / Math.max(options.width, options.height));
     const width = Math.round(options.width * scale);
     const height = Math.round(options.height * scale);
+    const fx = settings.effects;
+    const disposables: { dispose(): void }[] = [];
+
+    try {
+      // 1. On this thread: the plate (backdrop, floor shadow, reflection, water) and the
+      // water mask, plus a snapshot of the can and the lens for the worker.
+      const { plate, mask, request, transfer } = await this.atExportSize(width, height, options.transparent ?? false, async () => {
+        const plate = new THREE.WebGLRenderTarget(width, height, { type: THREE.HalfFloatType, samples: 4 });
+        this.renderer.setRenderTarget(plate);
+        this.renderer.clear();
+        this.renderer.render(this.scene, this.camera);
+        this.renderer.setRenderTarget(null);
+        // Water stays raster: path tracing tiny refractive beads needs thousands of
+        // samples to resolve their caustics. It is blended back in through a mask.
+        const mask = this.renderWaterMask(width, height);
+        const { snapshot, transfer } = await snapshotScene(this.spinGroup, new Set([this.dropMaterial, this.hazeMaterial]));
+        const photoSource = settings.lighting.matchBackground && settings.background.kind === "image" && settings.background.visible ? this.backgroundImage : null;
+        const photo = photoSource ? await createImageBitmap(photoSource) : null;
+        if (photo) transfer.push(photo);
+        const e = this.scene.environmentRotation;
+        const request = {
+          width,
+          height,
+          samples: options.samples,
+          scene: snapshot,
+          lighting: settings.lighting,
+          photo,
+          environmentRotation: [e.x, e.y, e.z] as [number, number, number],
+          camera: {
+            position: this.camera.position.toArray(),
+            quaternion: this.camera.quaternion.toArray(),
+            fov: this.camera.fov,
+            aspect: this.camera.aspect,
+            near: this.camera.near,
+            far: this.camera.far
+          },
+          fStop: fx.dofEnabled ? fx.aperture : null,
+          focusDistance: this.camera.position.distanceTo(this.dof.target ?? this.spinGroup.position)
+        };
+        return { plate, mask, request, transfer };
+      });
+      disposables.push(plate);
+      if (mask) disposables.push(mask);
+
+      // 2. In the worker: the can, path traced. The live view keeps running meanwhile.
+      const traced = await traceInWorker(request, transfer, { onStage: options.onStage, onProgress: options.onProgress, signal: options.signal });
+      const tracedTexture = new THREE.DataTexture(traced.pixels, traced.width, traced.height, THREE.RGBAFormat, THREE.HalfFloatType);
+      tracedTexture.needsUpdate = true;
+      disposables.push(tracedTexture);
+
+      // 3. Back here: composite, finish and encode.
+      return await this.atExportSize(width, height, options.transparent ?? false, async () => {
+        compositeAndFinish(this.renderer, plate.texture, tracedTexture, mask?.texture ?? null, fx);
+        const blob = await new Promise<Blob | null>((resolve) => this.canvas.toBlob(resolve, options.type, options.quality ?? 0.95));
+        if (!blob) throw new Error("The browser could not encode the image");
+        return blob;
+      });
+    } finally {
+      for (const d of disposables) d.dispose();
+    }
+  }
+
+  /**
+   * Compile the photoreal renderer in the background (in the worker) so the next final
+   * render starts tracing sooner. Safe to call repeatedly; failures are ignored.
+   */
+  warmFinalRender() {
+    if (this.warming || this.busy) return;
+    this.warming = this.renderFinal({ width: 96, height: 120, type: "image/png", samples: 1 })
+      .catch(() => undefined)
+      .finally(() => (this.warming = null));
+  }
+
+  /**
+   * Run `work` with the renderer sized for an export and the live loop paused, then put
+   * the live view back however `work` ends.
+   */
+  private async atExportSize<T>(width: number, height: number, transparent: boolean, work: () => Promise<T>): Promise<T> {
+    this.busy = true;
     const ratio = this.renderer.getPixelRatio();
     const background = this.scene.background;
     const helper = this.gizmo.getHelper();
     const gizmoVisible = helper.visible;
-    const parent = this.spinGroup.parent;
-    const waterShells = this.canGroup.children.filter((c) => {
-      const material = (c as THREE.Mesh).material;
-      return material === this.dropMaterial || material === this.hazeMaterial;
-    });
-    const disposables: { dispose(): void }[] = [];
-
     try {
       helper.visible = false;
       this.renderer.setPixelRatio(1);
@@ -493,70 +570,14 @@ export class CanStage {
       this.droplets?.render();
       this.orientLights();
       this.updateFocus();
-
-      // 1. The plate: backdrop, floor shadow and reflection, rendered linear.
-      if (options.transparent) {
+      if (transparent) {
         this.scene.background = null;
         this.renderer.setClearColor(0x000000, 0);
       } else {
         this.paintBackgroundTexture(width / height);
       }
-      const plate = new THREE.WebGLRenderTarget(width, height, { type: THREE.HalfFloatType, samples: 4 });
-      disposables.push(plate);
-      this.renderer.setRenderTarget(plate);
-      this.renderer.clear();
-      this.renderer.render(this.scene, this.camera);
-      this.renderer.setRenderTarget(null);
-
-      // Water stays raster: path tracing tiny refractive beads needs thousands of samples
-      // to resolve their caustics. The plate's water is blended back in through a mask.
-      const mask = this.renderWaterMask(width, height);
-      if (mask) disposables.push(mask);
-
-      // 2. The can alone, path traced in the same light. The floor is matte: invisible
-      // to the camera but there for bounce light and for the can to reflect.
-      const traceScene = new THREE.Scene();
-      traceScene.add(this.spinGroup);
-      const floorMaterial = new THREE.MeshStandardMaterial({ color: "#8c8c8c", roughness: 0.55 });
-      (floorMaterial as THREE.MeshStandardMaterial & { matte: boolean }).matte = true;
-      const floor = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000), floorMaterial);
-      floor.rotation.x = -Math.PI / 2;
-      traceScene.add(floor);
-      disposables.push(floorMaterial, floor.geometry);
-      const photo = settings.lighting.matchBackground && settings.background.kind === "image" && settings.background.visible ? this.backgroundImage : null;
-      const envScene = buildEnvironmentScene(settings.lighting, photo);
-      const environment = captureEnvironment(this.renderer, envScene);
-      disposables.push(environment);
-      envScene.traverse((o) => {
-        const mesh = o as THREE.Mesh;
-        mesh.geometry?.dispose();
-        (mesh.material as THREE.Material | undefined)?.dispose?.();
-      });
-      traceScene.environment = environment.texture;
-      traceScene.environmentRotation.copy(this.scene.environmentRotation);
-      traceScene.background = null;
-
-      for (const shell of waterShells) this.canGroup.remove(shell);
-
-      const fx = settings.effects;
-      const tracer = await pathTrace(this.renderer, traceScene, this.camera, {
-        samples: options.samples,
-        fStop: fx.dofEnabled ? fx.aperture : null,
-        focusDistance: this.camera.position.distanceTo(this.dof.target ?? this.spinGroup.position),
-        onProgress: options.onProgress,
-        onStage: options.onStage,
-        signal: options.signal
-      });
-
-      // 3. Composite and finish onto the canvas, then encode.
-      compositeAndFinish(this.renderer, plate.texture, tracer.target.texture, mask?.texture ?? null, fx);
-      const blob = await new Promise<Blob | null>((resolve) => this.canvas.toBlob(resolve, options.type, options.quality ?? 0.95));
-      if (!blob) throw new Error("The browser could not encode the image");
-      return blob;
+      return await work();
     } finally {
-      if (parent && this.spinGroup.parent !== parent) parent.add(this.spinGroup);
-      for (const shell of waterShells) if (shell.parent !== this.canGroup) this.canGroup.add(shell);
-      for (const d of disposables) d.dispose();
       this.scene.background = background;
       helper.visible = gizmoVisible;
       this.renderer.setRenderTarget(null);
@@ -623,7 +644,7 @@ export class CanStage {
     this.composer.dispose();
     this.pmrem.dispose();
     this.envTarget?.dispose();
-    disposeTracer(this.renderer);
+    stopTraceWorker();
     this.renderer.dispose();
   }
 

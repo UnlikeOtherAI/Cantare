@@ -1,5 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 
+// CI has no GPU: keep exports on the quick path so a photoreal warm-up does not hog the CPU.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("cantare.exportMode", "quick"));
+});
+
 async function ready(page: Page) {
   await page.goto("/");
   await expect(page.locator(".splash")).toHaveCount(0, { timeout: 60_000 });

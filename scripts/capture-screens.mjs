@@ -23,6 +23,8 @@ const settle = (page, ms = 1800) => page.waitForTimeout(ms);
 async function fresh(browser, device) {
   const context = await browser.newContext({ ...DEVICES[device], acceptDownloads: true });
   const page = await context.newPage();
+  // Captures use the quick export; the photoreal warm-up would only slow them down.
+  await page.addInitScript(() => localStorage.setItem("cantare.exportMode", "quick"));
   await page.goto("http://localhost:5180/");
   await page.locator(".splash").waitFor({ state: "detached", timeout: 90_000 });
   await settle(page, 1200);

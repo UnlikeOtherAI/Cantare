@@ -81,19 +81,21 @@ function room(top: THREE.Color, horizon: THREE.Color, bottom: THREE.Color) {
   return mesh;
 }
 
+/** A background photo: an element in the page, a bitmap in the final-render worker. */
+export type Photo = HTMLImageElement | ImageBitmap;
+
 /**
  * Wrap a flat background photo round the can as a rough equirectangular panorama, so
  * the metal picks up the scene it is composited into. Blurred and largely desaturated:
  * it should read as a hint of the surroundings, not as a colour wash over the can. The
  * studio's own lights stay on top of it.
  */
-function photoRoom(image: HTMLImageElement): THREE.Mesh {
-  const canvas = document.createElement("canvas");
-  canvas.width = 1024;
-  canvas.height = 512;
-  const ctx = canvas.getContext("2d")!;
-  const iw = image.naturalWidth;
-  const ih = image.naturalHeight;
+function photoRoom(image: Photo): THREE.Mesh {
+  // OffscreenCanvas when there is no DOM: the final render builds this in a worker.
+  const canvas = typeof document === "undefined" ? new OffscreenCanvas(1024, 512) : Object.assign(document.createElement("canvas"), { width: 1024, height: 512 });
+  const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
+  const iw = "naturalWidth" in image ? image.naturalWidth : image.width;
+  const ih = "naturalHeight" in image ? image.naturalHeight : image.height;
   ctx.filter = "blur(14px)";
   // Sky and floor: stretch the top and bottom strips of the photo.
   ctx.drawImage(image, 0, 0, iw, ih * 0.08, -20, -20, 1064, 170);
@@ -139,7 +141,7 @@ function photoRoom(image: HTMLImageElement): THREE.Mesh {
  * can, never as a wash over the whole body. Every setup keeps both bright and dark
  * bands in the horizon, because bare metal needs that contrast to read as metal.
  */
-export function buildEnvironmentScene(lighting: LightingSettings, backdrop: HTMLImageElement | null = null): THREE.Scene {
+export function buildEnvironmentScene(lighting: LightingSettings, backdrop: Photo | null = null): THREE.Scene {
   const scene = new THREE.Scene();
   // Fills, walls and cards turn with the environment rotation; the key and rim do not.
   const set = new THREE.Group();
