@@ -131,6 +131,7 @@ export function LightPanel() {
               type="button"
               role="radio"
               aria-checked={lighting.environment === env.value}
+              aria-label={env.label}
               className={`tile${lighting.environment === env.value ? " is-active" : ""}`}
               onClick={() => set({ environment: env.value })}
             >

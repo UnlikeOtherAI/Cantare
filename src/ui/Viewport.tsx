@@ -83,7 +83,9 @@ export function Stage({ exporting }: { exporting: string | null }) {
       const panel = document.querySelector(".panel");
       const compact = window.matchMedia("(max-width: 1024px)").matches;
       const sheet = compact && panel ? panel.getBoundingClientRect().height : 0;
-      activeStage?.setInsets(56, sheet + 72);
+      // At the full detent the HUDs step aside and the strip above the sheet is all preview.
+      const full = compact && useUi.getState().sheet === "full";
+      activeStage?.setInsets(full ? 12 : 56, sheet + (full ? 12 : 72));
     };
     update();
     const panel = document.querySelector(".panel");

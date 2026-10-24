@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.server.json",
     "test": "vitest run",
     "server": "node server/index.ts",
-    "cap:sync": "pnpm build && cap sync"
+    "cap:sync": "pnpm build && cap sync",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@capacitor-community/media": "^9.1.0",
@@ -32,6 +33,7 @@
     "@capacitor/android": "^8.5.3",
     "@capacitor/cli": "^8.5.3",
     "@capacitor/ios": "^8.5.3",
+    "@playwright/test": "^1.64.1",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

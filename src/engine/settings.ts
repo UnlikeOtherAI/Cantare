@@ -170,7 +170,7 @@ export const DEFAULT_SETTINGS: CanSettings = {
     vignetteEnabled: true,
     vignette: 0.3,
     grainEnabled: true,
-    grain: 0.12,
+    grain: 0.06,
     grainSize: 0.4,
     gradeEnabled: true,
     grade: "neutral",

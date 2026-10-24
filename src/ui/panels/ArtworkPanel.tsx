@@ -126,6 +126,9 @@ export function ArtworkPanel() {
               onChange={(v) => patch("artwork", { wrap: v === "full" ? null : 0.5, height: null })}
             />
           </Field>
+          {artwork.wrap == null && placement && placement.wrap < 0.99 && (
+            <p className="help">This artwork is too tall to wrap all the way round at this height, so it covers {Math.round(placement.wrap * 100)}% of the can.</p>
+          )}
           {artwork.wrap != null && (
             <Slider label="Coverage" unit="%" min={10} max={100} value={Math.round(artwork.wrap * 100)} onChange={(v) => patch("artwork", { wrap: v / 100, height: null })} />
           )}

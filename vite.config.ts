@@ -1,4 +1,5 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
+import { configDefaults } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
@@ -6,5 +7,8 @@ export default defineConfig({
   server: {
     port: 5180,
     proxy: { "/api": "http://localhost:8797" }
+  },
+  test: {
+    exclude: [...configDefaults.exclude, "e2e/**"]
   }
 });

@@ -60,7 +60,7 @@ class GrainEffect extends Effect {
         float n = hash(cell) + hash(cell + 17.13) - 1.0;
         float l = dot(inputColor.rgb, vec3(0.2126, 0.7152, 0.0722));
         float weight = amount * (0.35 + 0.65 * (1.0 - abs(l * 2.0 - 1.0)));
-        outputColor = vec4(inputColor.rgb + n * weight * 0.12, inputColor.a);
+        outputColor = vec4(inputColor.rgb + n * weight * 0.07, inputColor.a);
       }`,
       {
         uniforms: new Map<string, THREE.Uniform>([
@@ -518,6 +518,7 @@ export class CanStage {
     if (this.frames <= 0) return;
     this.frames--;
     this.orientLights();
+    if (this.dofPass.enabled) this.updateFocus();
     this.composer.render();
     this.emitView();
     if (!this.firstFrame) {
@@ -541,6 +542,23 @@ export class CanStage {
   private cameraAzimuth() {
     const offset = this.camera.position.clone().sub(this.controls.target);
     return Math.atan2(offset.x, offset.z);
+  }
+
+  /**
+   * Focus on the surface facing the camera, not the can's axis: at shallow apertures the
+   * front of the label is a can-radius closer than the centre.
+   */
+  private updateFocus() {
+    const fx = this.settings?.effects;
+    if (!fx) return;
+    const H = this.format.height;
+    if (fx.focus === "point" && fx.focusPoint) {
+      this.dof.target = new THREE.Vector3(...fx.focusPoint);
+      return;
+    }
+    const toCamera = this.camera.position.clone().setY(0).normalize();
+    const R = this.format.bodyDiameter / 2;
+    this.dof.target = fx.focus === "lid" ? new THREE.Vector3(0, H, 0).addScaledVector(toCamera, R * 0.3) : new THREE.Vector3(0, H * 0.5, 0).addScaledVector(toCamera, R);
   }
 
   /** Lights are set relative to the camera; turn them with it. */
@@ -613,7 +631,7 @@ export class CanStage {
   private fitDistance() {
     const H = this.format.height;
     const fov = THREE.MathUtils.degToRad(this.camera.fov);
-    const visibleFraction = Math.max(0.35, 1 - (this.insets.top + this.insets.bottom) / Math.max(1, this.viewSize.y));
+    const visibleFraction = Math.max(0.12, 1 - (this.insets.top + this.insets.bottom) / Math.max(1, this.viewSize.y));
     const aspect = Math.max(0.4, this.camera.aspect / visibleFraction);
     const vertical = (H * 0.66) / (Math.tan(fov / 2) * visibleFraction);
     const horizontal = (this.format.bodyDiameter * 1.4) / (Math.tan(fov / 2) * aspect * visibleFraction);
@@ -843,9 +861,7 @@ export class CanStage {
     const shallow = THREE.MathUtils.clamp((16 - fx.aperture) / 14.6, 0, 1);
     this.dof.bokehScale = 1 + shallow * 6;
     this.dof.cocMaterial.focusRange = THREE.MathUtils.lerp(260, 25, shallow);
-    const H = this.format.height;
-    this.dof.target =
-      fx.focus === "point" && fx.focusPoint ? new THREE.Vector3(...fx.focusPoint) : new THREE.Vector3(0, fx.focus === "lid" ? H : H * 0.5, 0);
+    this.updateFocus();
     this.bloom.intensity = fx.bloomEnabled ? fx.bloom * 1.6 : 0;
     this.bloom.luminanceMaterial.threshold = 0.4 + fx.bloomThreshold * 0.55;
     this.vignette.darkness = fx.vignetteEnabled ? fx.vignette * 0.75 : 0;

@@ -65,7 +65,7 @@ export function CameraPanel() {
       <Group title="Quick angles" hint="Drag the stage to orbit">
         <div className="tiles tiles--4" role="radiogroup" aria-label="Quick angles">
           {ANGLES.map((a) => (
-            <button key={a.value} type="button" role="radio" aria-checked={angle === a.value} className={`tile${angle === a.value ? " is-active" : ""}`} onClick={() => goToAngle(a.value)}>
+            <button key={a.value} type="button" role="radio" aria-label={a.label === "¾" ? "Three-quarter" : a.label} aria-checked={angle === a.value} className={`tile${angle === a.value ? " is-active" : ""}`} onClick={() => goToAngle(a.value)}>
               <Icon name={a.icon} className="tile__icon" />
               <span className="tile__label">{a.label}</span>
             </button>

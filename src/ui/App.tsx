@@ -199,7 +199,7 @@ export function App() {
 
       <nav className="rail" aria-label="Tools">
         {TOOLS.map((tool, i) => (
-          <button key={tool} className={`rail__item${ui.tool === tool ? " is-active" : ""}`} type="button" aria-pressed={ui.tool === tool} onClick={() => pickTool(tool, "rail")}>
+          <button key={tool} className={`rail__item${ui.tool === tool ? " is-active" : ""}`} type="button" aria-label={TOOL_META[tool].title} aria-pressed={ui.tool === tool} onClick={() => pickTool(tool, "rail")}>
             <Icon name={TOOL_META[tool].icon} />
             <span>{TOOL_META[tool].label}</span>
             <kbd>{i + 1}</kbd>
@@ -219,7 +219,7 @@ export function App() {
 
       <nav className="toolstrip" aria-label="Tools">
         {TOOLS.map((tool) => (
-          <button key={tool} className={`toolstrip__item${ui.tool === tool ? " is-active" : ""}`} type="button" aria-pressed={ui.tool === tool} onClick={() => pickTool(tool, "strip")}>
+          <button key={tool} className={`toolstrip__item${ui.tool === tool ? " is-active" : ""}`} type="button" aria-label={TOOL_META[tool].title} aria-pressed={ui.tool === tool} onClick={() => pickTool(tool, "strip")}>
             <Icon name={TOOL_META[tool].icon} />
             <span>{TOOL_META[tool].label}</span>
           </button>
@@ -229,7 +229,7 @@ export function App() {
       {ui.dialog === "export" && <ExportDialog onClose={() => ui.set({ dialog: null })} onBusy={setExporting} />}
       {ui.dialog === "gallery" && <GalleryDialog onClose={() => ui.set({ dialog: null })} />}
 
-      {ui.toast && (
+      {ui.toast && !ui.dialog && (
         <div className={`toast${ui.toast.tone === "danger" ? " toast--danger" : ""}`} role="status" key={ui.toast.id}>
           <Icon name={ui.toast.tone === "ok" ? "check" : "alert"} className={`toast__icon${ui.toast.tone === "ok" ? " toast__icon--ok" : ""}`} />
           <span className="toast__text">{ui.toast.text}</span>
