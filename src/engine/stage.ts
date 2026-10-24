@@ -1,19 +1,8 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
-import {
-  BloomEffect,
-  BrightnessContrastEffect,
-  DepthOfFieldEffect,
-  Effect,
-  EffectComposer,
-  EffectPass,
-  HueSaturationEffect,
-  RenderPass,
-  ToneMappingEffect,
-  ToneMappingMode,
-  VignetteEffect
-} from "postprocessing";
+import { DepthOfFieldEffect, EffectComposer, EffectPass, RenderPass } from "postprocessing";
+import { configurePost, createPostEffects, postEffectList, type PostEffects } from "./postEffects";
 import { paintBody, placeArtwork, type ArtworkPlacement } from "./decoration";
 import { DropletField } from "./droplets";
 import { buildEnvironmentScene, estimateLight, kelvinToColor, lightDirection, paintBackdrop } from "./environment";
@@ -23,59 +12,8 @@ import { lidNormalMap, rivetGeometry, tabGeometry } from "./lidDetail";
 import { applySurface, finishValues, surfaceSpec } from "./materials";
 import { arcAtHeight, arcLengths, buildProfiles, type CanProfiles } from "./profile";
 import type { CameraPreset, CanSettings } from "./settings";
-import { loadImage } from "./textures";
-
-// Exposure and white balance before tone mapping.
-class GradeEffect extends Effect {
-  constructor() {
-    super(
-      "GradeEffect",
-      `uniform float exposure;
-      uniform float warmth;
-      void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
-        vec3 c = inputColor.rgb * exposure;
-        c *= vec3(1.0 + warmth * 0.07, 1.0 + warmth * 0.01, 1.0 - warmth * 0.08);
-        outputColor = vec4(c, inputColor.a);
-      }`,
-      {
-        uniforms: new Map<string, THREE.Uniform>([
-          ["exposure", new THREE.Uniform(1)],
-          ["warmth", new THREE.Uniform(0)]
-        ])
-      }
-    );
-  }
-}
-
-// Luminance film grain after tone mapping, with a grain size in output pixels.
-class GrainEffect extends Effect {
-  constructor() {
-    super(
-      "GrainEffect",
-      `uniform float amount;
-      uniform float grainSize;
-      uniform vec2 pixels;
-      float hash(vec2 p) { p = fract(p * vec2(443.897, 441.423)); p += dot(p, p.yx + 19.19); return fract((p.x + p.y) * p.x); }
-      void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
-        vec2 cell = floor(uv * pixels / grainSize);
-        float n = hash(cell) + hash(cell + 17.13) - 1.0;
-        float l = dot(inputColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-        float weight = amount * (0.35 + 0.65 * (1.0 - abs(l * 2.0 - 1.0)));
-        outputColor = vec4(inputColor.rgb + n * weight * 0.07, inputColor.a);
-      }`,
-      {
-        uniforms: new Map<string, THREE.Uniform>([
-          ["amount", new THREE.Uniform(0)],
-          ["grainSize", new THREE.Uniform(1)],
-          ["pixels", new THREE.Uniform(new THREE.Vector2(1, 1))]
-        ])
-      }
-    );
-  }
-  override setSize(width: number, height: number) {
-    (this.uniforms.get("pixels")!.value as THREE.Vector2).set(width, height);
-  }
-}
+import { captureEnvironment, compositeAndFinish, pathTrace } from "./finalRender";
+import { heightToNormal, loadImage } from "./textures";
 
 export interface StageInfo {
   format: CanFormat;
@@ -96,6 +34,13 @@ export interface ExportOptions {
   type: "image/png" | "image/jpeg";
   quality?: number;
   transparent?: boolean;
+}
+
+export interface FinalRenderOptions extends ExportOptions {
+  /** Path-tracing samples per pixel: more is cleaner and slower. */
+  samples: number;
+  onProgress?(samples: number, total: number): void;
+  signal?: AbortSignal;
 }
 
 /** What a one-pointer drag on the stage does. "turn" rotates the can itself. */
@@ -121,12 +66,7 @@ export class CanStage {
   private composer: EffectComposer;
   private dof: DepthOfFieldEffect;
   private dofPass: EffectPass;
-  private bloom: BloomEffect;
-  private grade = new GradeEffect();
-  private grain = new GrainEffect();
-  private contrast = new BrightnessContrastEffect();
-  private saturation = new HueSaturationEffect();
-  private vignette = new VignetteEffect({ offset: 0.32, darkness: 0.3 });
+  private post: PostEffects = createPostEffects();
   private pmrem: THREE.PMREMGenerator;
   private envTarget: THREE.WebGLRenderTarget | null = null;
 
@@ -173,6 +113,8 @@ export class CanStage {
   private backgroundAspect = 0;
 
   private frames = 2;
+  /** A final render owns the renderer; the live loop pauses. */
+  private busy = false;
   private firstFrame = false;
   private disposed = false;
   private built = false;
@@ -221,9 +163,7 @@ export class CanStage {
     this.dofPass = new EffectPass(this.camera, this.dof);
     this.dofPass.enabled = false;
     this.composer.addPass(this.dofPass);
-    this.bloom = new BloomEffect({ intensity: 0.4, luminanceThreshold: 0.82, luminanceSmoothing: 0.25, mipmapBlur: true, radius: 0.62 });
-    const tone = new ToneMappingEffect({ mode: ToneMappingMode.NEUTRAL });
-    this.composer.addPass(new EffectPass(this.camera, this.grade, this.bloom, tone, this.contrast, this.saturation, this.vignette, this.grain));
+    this.composer.addPass(new EffectPass(this.camera, ...postEffectList(this.post)));
 
     this.dropMaterial = new THREE.MeshPhysicalMaterial({
       color: "#ffffff",
@@ -519,6 +459,119 @@ export class CanStage {
     return blob;
   }
 
+  /**
+   * The hyper-realistic render: path traces the can at the export size and composites it
+   * over the backdrop, floor shadow and reflection, then applies the photographic finish.
+   */
+  async renderFinal(options: FinalRenderOptions): Promise<Blob> {
+    const settings = this.settings;
+    if (!settings || this.busy) throw new Error("The stage is not ready");
+    this.busy = true;
+    const max = this.maxExportSize();
+    const scale = Math.min(1, max / Math.max(options.width, options.height));
+    const width = Math.round(options.width * scale);
+    const height = Math.round(options.height * scale);
+    const ratio = this.renderer.getPixelRatio();
+    const background = this.scene.background;
+    const helper = this.gizmo.getHelper();
+    const gizmoVisible = helper.visible;
+    const dropBump = this.dropMaterial.bumpMap;
+    const dropNormal = this.dropMaterial.normalMap;
+    const parent = this.spinGroup.parent;
+    const disposables: { dispose(): void }[] = [];
+
+    try {
+      helper.visible = false;
+      this.renderer.setPixelRatio(1);
+      this.renderer.setSize(width, height, false);
+      this.camera.aspect = width / height;
+      this.camera.clearViewOffset();
+      this.camera.updateProjectionMatrix();
+      this.droplets?.render();
+      this.orientLights();
+      this.updateFocus();
+
+      // 1. The plate: backdrop, floor shadow and reflection, rendered linear.
+      if (options.transparent) {
+        this.scene.background = null;
+        this.renderer.setClearColor(0x000000, 0);
+      } else {
+        this.paintBackgroundTexture(width / height);
+      }
+      const plate = new THREE.WebGLRenderTarget(width, height, { type: THREE.HalfFloatType, samples: 4 });
+      disposables.push(plate);
+      this.renderer.setRenderTarget(plate);
+      this.renderer.clear();
+      this.renderer.render(this.scene, this.camera);
+      this.renderer.setRenderTarget(null);
+
+      // 2. The can alone, path traced in the same light. The floor is matte: invisible
+      // to the camera but there for bounce light and for the can to reflect.
+      const traceScene = new THREE.Scene();
+      traceScene.add(this.spinGroup);
+      const floorMaterial = new THREE.MeshStandardMaterial({ color: "#8c8c8c", roughness: 0.55 });
+      (floorMaterial as THREE.MeshStandardMaterial & { matte: boolean }).matte = true;
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000), floorMaterial);
+      floor.rotation.x = -Math.PI / 2;
+      traceScene.add(floor);
+      disposables.push(floorMaterial, floor.geometry);
+      const photo = settings.lighting.matchBackground && settings.background.kind === "image" && settings.background.visible ? this.backgroundImage : null;
+      const envScene = buildEnvironmentScene(settings.lighting, photo);
+      const environment = captureEnvironment(this.renderer, envScene);
+      disposables.push(environment);
+      envScene.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        mesh.geometry?.dispose();
+        (mesh.material as THREE.Material | undefined)?.dispose?.();
+      });
+      traceScene.environment = environment.texture;
+      traceScene.environmentRotation.copy(this.scene.environmentRotation);
+      traceScene.background = null;
+
+      // The tracer has no bump maps: give the droplets a real normal map.
+      if (this.droplets) {
+        const pixel = (Math.PI * this.format.bodyDiameter) / this.droplets.height.width;
+        const normal = heightToNormal(this.droplets.height, 2 / (8 * pixel), true);
+        disposables.push(normal);
+        this.dropMaterial.bumpMap = null;
+        this.dropMaterial.normalMap = normal;
+        this.dropMaterial.needsUpdate = true;
+      }
+
+      const fx = settings.effects;
+      const tracer = await pathTrace(this.renderer, traceScene, this.camera, {
+        samples: options.samples,
+        fStop: fx.dofEnabled ? fx.aperture : null,
+        focusDistance: this.camera.position.distanceTo(this.dof.target ?? this.spinGroup.position),
+        onProgress: options.onProgress,
+        signal: options.signal
+      });
+      disposables.push(tracer);
+
+      // 3. Composite and finish onto the canvas, then encode.
+      compositeAndFinish(this.renderer, plate.texture, tracer.target.texture, fx);
+      const blob = await new Promise<Blob | null>((resolve) => this.canvas.toBlob(resolve, options.type, options.quality ?? 0.95));
+      if (!blob) throw new Error("The browser could not encode the image");
+      return blob;
+    } finally {
+      if (parent && this.spinGroup.parent !== parent) parent.add(this.spinGroup);
+      this.dropMaterial.bumpMap = dropBump;
+      this.dropMaterial.normalMap = dropNormal;
+      this.dropMaterial.needsUpdate = true;
+      for (const d of disposables) d.dispose();
+      this.scene.background = background;
+      helper.visible = gizmoVisible;
+      this.renderer.setRenderTarget(null);
+      this.renderer.setClearColor(0x000000, 1);
+      this.renderer.setPixelRatio(ratio);
+      this.busy = false;
+      this.resize(this.viewSize.x, this.viewSize.y);
+      this.backgroundAspect = 0;
+      this.refreshBackground();
+      this.invalidate(3);
+    }
+  }
+
   maxExportSize() {
     const gl = this.renderer.getContext();
     const dims = gl.getParameter(gl.MAX_VIEWPORT_DIMS) as Int32Array;
@@ -543,6 +596,7 @@ export class CanStage {
   // ---------------------------------------------------------------------------
 
   private tick = () => {
+    if (this.busy) return;
     const now = performance.now();
     const dt = Math.min(0.1, (now - this.lastTime) / 1000);
     this.lastTime = now;
@@ -912,16 +966,7 @@ export class CanStage {
     this.dof.bokehScale = 1 + shallow * 6;
     this.dof.cocMaterial.focusRange = THREE.MathUtils.lerp(260, 25, shallow);
     this.updateFocus();
-    this.bloom.intensity = fx.bloomEnabled ? fx.bloom * 1.6 : 0;
-    this.bloom.luminanceMaterial.threshold = 0.4 + fx.bloomThreshold * 0.55;
-    this.vignette.darkness = fx.vignetteEnabled ? fx.vignette * 0.75 : 0;
-    this.grain.uniforms.get("amount")!.value = fx.grainEnabled ? fx.grain : 0;
-    this.grain.uniforms.get("grainSize")!.value = 1 + fx.grainSize * 2.5;
-    const grade = fx.gradeEnabled;
-    this.grade.uniforms.get("exposure")!.value = grade ? Math.pow(2, fx.exposure) : 1;
-    this.grade.uniforms.get("warmth")!.value = grade ? fx.warmth : 0;
-    this.contrast.contrast = grade ? fx.contrast * 0.5 : 0;
-    this.saturation.saturation = grade ? fx.saturation * (fx.saturation < 0 ? 1 : 0.6) : 0;
+    configurePost(this.post, fx);
     const ground = fx.groundEnabled;
     this.ground.material.opacity = fx.shadow * 0.62;
     this.contact.material.opacity = fx.shadow;
