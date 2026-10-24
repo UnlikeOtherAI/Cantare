@@ -15,8 +15,6 @@ interface Trail {
   width: number;
 }
 
-/** Radius (mm) above which a drop slides down a vertical wall. */
-const RUN_RADIUS = 2.05;
 const CELL = 6;
 
 function mulberry32(seed: number) {
@@ -45,6 +43,8 @@ export class DropletField {
   private hazeNoise: ImageData | null = null;
   private random = mulberry32(1);
   private dirty = true;
+  /** Radius (mm) above which a drop slides down the wall. */
+  private runRadius = 2.4;
 
   constructor(
     private circumference: number,
@@ -124,13 +124,30 @@ export class DropletField {
     this.dirty = true;
   }
 
+  /** 0..1: how readily heavy drops run. */
+  setRuns(runs: number) {
+    this.runRadius = 3.0 - runs * 1.9;
+  }
+
   /** Spray a burst of fine droplets around a point. */
-  spray(x: number, y: number, radius: number, size: number) {
-    const count = Math.round(10 + radius * 1.8);
+  spray(x: number, y: number, radius: number, size: number, flow = 0.6) {
+    const count = Math.round((4 + radius * 1.6) * (0.3 + flow * 1.2));
     for (let i = 0; i < count; i++) {
       const angle = this.random() * Math.PI * 2;
       const dist = radius * Math.sqrt(-2 * Math.log(1 - this.random() * 0.98)) * 0.45;
       const r = 0.08 + (0.25 + size * 0.9) * this.random() ** 2.4;
+      this.add({ x: x + Math.cos(angle) * dist, y: y + Math.sin(angle) * dist, r });
+    }
+    this.dirty = true;
+  }
+
+  /** Paint drops where the brush passes: fewer, fuller drops than the spray. */
+  brush(x: number, y: number, radius: number, size: number, flow = 0.6) {
+    const count = Math.max(1, Math.round(radius * 0.35 * (0.3 + flow)));
+    for (let i = 0; i < count; i++) {
+      const angle = this.random() * Math.PI * 2;
+      const dist = radius * Math.sqrt(this.random());
+      const r = 0.2 + (0.4 + size * 1.6) * this.random() ** 1.8;
       this.add({ x: x + Math.cos(angle) * dist, y: y + Math.sin(angle) * dist, r });
     }
     this.dirty = true;
@@ -232,7 +249,7 @@ export class DropletField {
       drop.r = Math.cbrt(v1 + v2);
       other = this.neighbour(drop);
     }
-    if (drop.r > RUN_RADIUS) {
+    if (drop.r > this.runRadius) {
       this.run(drop);
       return;
     }
@@ -265,11 +282,11 @@ export class DropletField {
         this.insert(bead);
       }
       volume -= 0.012 * Math.cbrt(volume);
-      if (Math.cbrt(volume) < RUN_RADIUS * 0.82) break;
+      if (Math.cbrt(volume) < this.runRadius * 0.82) break;
     }
     this.trails.push(trail);
     const r = Math.cbrt(Math.max(volume, 0.05));
-    const end = { x, y: Math.max(y, this.bounds.low + r), r: Math.min(r, RUN_RADIUS * 0.98) };
+    const end = { x, y: Math.max(y, this.bounds.low + r), r: Math.min(r, this.runRadius * 0.98) };
     this.drops.push(end);
     this.insert(end);
   }

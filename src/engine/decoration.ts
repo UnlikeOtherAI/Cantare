@@ -48,11 +48,13 @@ export function placeArtwork(
   } else if (settings.mode === "printed" && template && Math.abs(aspect - template.width / template.height) / (template.width / template.height) < 0.06) {
     height = template.height;
     fromTemplate = true;
+  } else if (settings.mode === "label" && settings.wrap != null) {
+    height = (circumference * settings.wrap) / aspect;
   } else {
     height = circumference / aspect;
   }
   height = Math.min(height, available);
-  const wrap = Math.min(1, (height * aspect) / circumference);
+  const wrap = Math.min(1, settings.mode === "label" && settings.wrap != null ? settings.wrap : (height * aspect) / circumference);
   const bottom = Math.min(high - height, Math.max(low, low + (available - height) / 2 + settings.offset));
   return { bottom, height, wrap, fromTemplate };
 }

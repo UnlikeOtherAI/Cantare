@@ -24,7 +24,7 @@ the Ledger `lk_` token stays on the server.
 ```bash
 pnpm install
 pnpm dev          # http://localhost:5180
-pnpm server       # http://localhost:8790, proxied from /api in dev
+pnpm server       # http://localhost:8797, proxied from /api in dev
 pnpm test
 pnpm typecheck
 ```

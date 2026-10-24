@@ -26,3 +26,14 @@ export async function generateBackground(prompt: string, shape: BackgroundShape,
   if (!response.ok || !body.image) throw new Error(body.error ?? "Background generation failed.");
   return body.image;
 }
+
+/** Whether this deployment can generate backgrounds (false when Ledger is not configured). */
+export async function generationAvailable(): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_BASE}/api/health`);
+    const body = (await response.json()) as { generation?: boolean };
+    return Boolean(body.generation);
+  } catch {
+    return false;
+  }
+}

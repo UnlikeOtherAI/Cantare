@@ -9,7 +9,7 @@ import { extname, join, normalize, resolve } from "node:path";
 import { backgroundPrompt, parseBackgroundRequest } from "./backgrounds.ts";
 import { RateLimiter } from "./rateLimit.ts";
 
-const PORT = Number(process.env.PORT ?? 8790);
+const PORT = Number(process.env.PORT ?? 8797);
 const LEDGER_URL = (process.env.LEDGER_URL ?? "").replace(/\/$/, "");
 const LEDGER_TOKEN = process.env.LEDGER_TOKEN ?? "";
 const LEDGER_PURPOSE_ID = process.env.LEDGER_PURPOSE_ID ?? "";

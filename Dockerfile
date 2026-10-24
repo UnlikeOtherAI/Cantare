@@ -9,9 +9,9 @@ RUN pnpm build
 
 FROM node:24-alpine
 WORKDIR /app
-ENV NODE_ENV=production PORT=8790 STATIC_DIR=/app/dist
+ENV NODE_ENV=production PORT=8797 STATIC_DIR=/app/dist
 COPY --from=build /app/dist ./dist
 COPY server ./server
-EXPOSE 8790
+EXPOSE 8797
 USER node
 CMD ["node", "server/index.ts"]

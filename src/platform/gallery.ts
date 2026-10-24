@@ -14,23 +14,25 @@ export interface GalleryItem {
 
 const DB = "cantare";
 const STORE = "renders";
+const BACKGROUNDS = "backgrounds";
 
 function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB, 1);
-    request.onupgradeneeded = () => {
-      const store = request.result.createObjectStore(STORE, { keyPath: "id" });
-      store.createIndex("createdAt", "createdAt");
+    const request = indexedDB.open(DB, 2);
+    request.onupgradeneeded = (event) => {
+      const db = request.result;
+      if (event.oldVersion < 1) db.createObjectStore(STORE, { keyPath: "id" }).createIndex("createdAt", "createdAt");
+      if (event.oldVersion < 2) db.createObjectStore(BACKGROUNDS, { keyPath: "id" });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
 }
 
-async function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+async function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>, name = STORE): Promise<T> {
   const db = await open();
   return new Promise<T>((resolve, reject) => {
-    const request = run(db.transaction(STORE, mode).objectStore(STORE));
+    const request = run(db.transaction(name, mode).objectStore(name));
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   }).finally(() => db.close());
@@ -60,4 +62,25 @@ export async function listGallery(): Promise<GalleryItem[]> {
 
 export async function removeFromGallery(id: string): Promise<void> {
   await tx("readwrite", (store) => store.delete(id));
+}
+
+export interface RecentBackground {
+  id: string;
+  createdAt: number;
+  prompt: string;
+  blob: Blob;
+}
+
+const RECENT_LIMIT = 8;
+
+/** Generated backgrounds, kept on the device so they can be reused without paying again. */
+export async function addRecentBackground(prompt: string, blob: Blob): Promise<void> {
+  await tx("readwrite", (store) => store.put({ id: crypto.randomUUID(), createdAt: Date.now(), prompt, blob }), BACKGROUNDS);
+  const all = await listRecentBackgrounds();
+  for (const old of all.slice(RECENT_LIMIT)) await tx("readwrite", (store) => store.delete(old.id), BACKGROUNDS);
+}
+
+export async function listRecentBackgrounds(): Promise<RecentBackground[]> {
+  const items = await tx<RecentBackground[]>("readonly", (store) => store.getAll(), BACKGROUNDS);
+  return items.sort((a, b) => b.createdAt - a.createdAt);
 }
