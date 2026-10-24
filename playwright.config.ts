@@ -1,10 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// WebGL runs on SwiftShader in headless Chromium: slow, but deterministic.
+// WebGL runs on SwiftShader in headless Chromium: slow, but deterministic. CI runners have
+// no GPU and render several times slower than a workstation, so they get longer limits.
+const ci = Boolean(process.env.CI);
+
 export default defineConfig({
   testDir: "e2e",
-  timeout: 90_000,
-  expect: { timeout: 20_000 },
+  timeout: ci ? 240_000 : 90_000,
+  expect: { timeout: ci ? 90_000 : 20_000 },
   fullyParallel: false,
   workers: 1,
   reporter: [["list"]],
