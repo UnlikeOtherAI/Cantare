@@ -461,13 +461,13 @@ export class CanStage {
   /** Label top/bottom edges on screen, at the side of the can facing the camera. */
   labelScreenEdges(): { top: number; bottom: number; left: number; right: number } | null {
     const placement = this.placement;
-    if (!placement || this.settings?.artwork.mode !== "label") return null;
+    if (!placement) return null;
     const R = this.format.bodyDiameter / 2;
     const toCamera = this.canGroup.worldToLocal(this.camera.position.clone()).setY(0).normalize().multiplyScalar(R);
-    const top = this.project(toCamera.clone().setY(placement.bottom + placement.height));
-    const bottom = this.project(toCamera.clone().setY(placement.bottom));
-    const mid = this.project(new THREE.Vector3(0, placement.bottom, 0));
-    const side = this.project(this.sideways(new THREE.Vector3(0, placement.bottom, 0), R));
+    const top = this.project(toCamera.clone().setY(placement.top));
+    const bottom = this.project(toCamera.clone().setY(placement.base));
+    const mid = this.project(new THREE.Vector3(0, placement.base, 0));
+    const side = this.project(this.sideways(new THREE.Vector3(0, placement.base, 0), R));
     const half = Math.abs(side.x - mid.x);
     return { top: top.y, bottom: bottom.y, left: mid.x - half, right: mid.x + half };
   }
@@ -801,7 +801,8 @@ export class CanStage {
       this.labelMesh.geometry.dispose();
       this.labelMesh = null;
     }
-    if (image && this.placement && settings.artwork.mode === "label") {
+    const sticker = settings.artwork.mode === "sticker";
+    if (image && this.placement && settings.artwork.mode !== "printed") {
       const R = this.profiles.landmarks.radius + 0.02;
       const z0 = this.placement.bottom;
       const z1 = z0 + this.placement.height;
@@ -837,7 +838,10 @@ export class CanStage {
         clearcoatRoughness: stock.clearcoatRoughness,
         sheen: paper ? 0.25 : 0,
         sheenRoughness: 0.8,
-        side: THREE.DoubleSide
+        side: THREE.DoubleSide,
+        // Stickers are die-cut with rounded corners.
+        alphaMap: sticker ? stickerMask((this.placement.wrap * Math.PI * this.format.bodyDiameter) / this.placement.height) : null,
+        alphaTest: sticker ? 0.5 : 0
       });
       this.labelMaterial.needsUpdate = true;
       this.labelMesh = new THREE.Mesh(geometry, this.labelMaterial);
@@ -1130,6 +1134,29 @@ export class CanStage {
     }
     if (water.tool === "erase") field.wipe(point.x, point.y, radius);
   }
+}
+
+let stickerMaskCache: { aspect: number; texture: THREE.CanvasTexture } | null = null;
+
+/** Rounded-rectangle mask for a sticker of the given width/height ratio. */
+function stickerMask(aspect: number): THREE.CanvasTexture {
+  if (stickerMaskCache && Math.abs(stickerMaskCache.aspect - aspect) < 0.01) return stickerMaskCache.texture;
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = Math.max(32, Math.round(512 / aspect));
+  const ctx = canvas.getContext("2d")!;
+  const radius = Math.min(canvas.width, canvas.height) * 0.08;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.roundRect(0, 0, canvas.width, canvas.height, radius);
+  ctx.fill();
+  stickerMaskCache?.texture.dispose();
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.NoColorSpace;
+  stickerMaskCache = { aspect, texture };
+  return texture;
 }
 
 function contactTexture(): THREE.CanvasTexture {

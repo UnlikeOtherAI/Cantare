@@ -42,8 +42,13 @@ export function Stage({ exporting }: { exporting: string | null }) {
     stage.onFirstFrame = () => setTimeout(() => useUi.getState().set({ ready: true }), 150);
     stage.onArtworkDrag = (rotation, offset) => {
       const { settings, patch } = useEditor.getState();
+      const placement = useUi.getState().info?.placement;
       const a = settings.artwork;
-      patch("artwork", { rotation: Math.round((a.rotation + rotation) * 10) / 10, offset: a.mode === "label" ? a.offset + offset : a.offset });
+      const rotated = Math.round((a.rotation + rotation) * 10) / 10;
+      if (!placement || Math.abs(offset) < 0.01) return patch("artwork", { rotation: rotated });
+      // Move both edges together, keeping the artwork inside its area.
+      const shift = Math.max(placement.range.low - placement.base, Math.min(placement.range.high - placement.top, offset));
+      patch("artwork", { rotation: rotated, top: placement.top + shift, bottom: placement.base + shift });
     };
     stage.onFocusPicked = (focusPoint) => {
       useEditor.getState().patch("effects", { focus: "point", focusPoint, dofEnabled: true });
@@ -136,18 +141,19 @@ export function Stage({ exporting }: { exporting: string | null }) {
   const rayY = ((50 - hy) / 100) * gizmoSize;
 
   const waterBrush = ui.tool === "water" && settings.water.tool !== "none";
-  const label = ui.tool === "artwork" && overlay?.label;
+  const label = ui.tool === "artwork" && settings.artwork.url && overlay?.label;
 
   const resizeLabel = (edge: "top" | "bottom") => (e: React.PointerEvent) => {
     e.stopPropagation();
     const el = e.currentTarget as HTMLElement;
     el.setPointerCapture(e.pointerId);
-    const info = useUi.getState().info;
-    const start = { y: e.clientY, height: info?.placement?.height ?? 80, offset: useEditor.getState().settings.artwork.offset };
+    const placement = useUi.getState().info?.placement;
+    if (!placement) return;
+    const start = { y: e.clientY, top: placement.top, base: placement.base };
     const move = (ev: PointerEvent) => {
       const mm = (start.y - ev.clientY) / (overlay?.pxPerMm ?? 1);
-      if (edge === "top") patch("artwork", { height: Math.max(10, start.height + mm) });
-      else patch("artwork", { height: Math.max(10, start.height - mm), offset: start.offset + mm / 2 });
+      if (edge === "top") patch("artwork", { top: start.top + mm, bottom: start.base });
+      else patch("artwork", { bottom: start.base + mm, top: start.top });
     };
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", () => el.removeEventListener("pointermove", move), { once: true });
