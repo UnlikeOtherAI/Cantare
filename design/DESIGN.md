@@ -4,6 +4,8 @@ Scope: the editor for web, iOS and Android (phone + tablet) from one codebase. E
 `docs/brief.md` has a home here; nothing outside it (no accounts UI, teams, pricing). Tokens live in
 [`tokens.css`](tokens.css); the clickable shell is in [`prototype/`](prototype/index.html)
 (`?tool=light&sheet=half&state=welcome…` URL params switch states — see the end of `app.js`).
+Rendered captures of every tool and state at 1440×900, 1366×1024, 1024×1366 and 390×844 are in
+[`screenshots/`](screenshots/) (desktop/tablet at 1×, phone at 2×).
 
 ---
 
