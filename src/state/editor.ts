@@ -14,6 +14,8 @@ interface EditorStore {
   future: CanSettings[];
   set<K extends keyof CanSettings>(key: K, value: CanSettings[K], options?: Options): void;
   patch<K extends Section>(key: K, value: Partial<CanSettings[K]>, options?: Options): void;
+  /** Replaces the whole scene (a saved setup, a new scene) as one undo step. */
+  load(settings: CanSettings): void;
   undo(): void;
   redo(): void;
 }
@@ -42,6 +44,11 @@ export const useEditor = create<EditorStore>((set) => ({
   set: (key, value, options) => set((state) => commit(state, { ...state.settings, [key]: value }, options)),
   patch: (key, value, options) =>
     set((state) => commit(state, { ...state.settings, [key]: { ...(state.settings[key] as object), ...value } }, options)),
+  load: (settings) =>
+    set((state) => {
+      lastCommit = 0;
+      return commit(state, settings);
+    }),
   undo: () =>
     set((state) => {
       const previous = state.past[state.past.length - 1];

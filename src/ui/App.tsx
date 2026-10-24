@@ -24,6 +24,8 @@ import { LightPanel } from "./panels/LightPanel";
 import { ScenePanel } from "./panels/ScenePanel";
 import { WaterPanel } from "./panels/WaterPanel";
 import { PanelHead } from "./controls";
+import { SceneMenu } from "./SceneMenu";
+import { SetupsDialog } from "./SetupsDialog";
 import { getStage, Stage } from "./Viewport";
 
 const TOOL_META: Record<Tool, { label: string; title: string; icon: IconName; panel: () => ReactNode; flush?: boolean }> = {
@@ -89,7 +91,6 @@ export function App() {
   const settings = useEditor((s) => s.settings);
   const { undo, redo, past, future } = useEditor();
   const [exporting, setExporting] = useState<string | null>(null);
-  const [renaming, setRenaming] = useState(false);
   const format = getFormat(settings.formatId);
   const meta = TOOL_META[ui.tool];
   const Panel = meta.panel;
@@ -156,24 +157,7 @@ export function App() {
           </span>
         </div>
         <div className="topbar__centre">
-          <div className="doc" onClick={() => setRenaming(true)} title="Rename scene">
-            {renaming ? (
-              <input
-                className="doc__input"
-                autoFocus
-                defaultValue={ui.sceneName}
-                aria-label="Scene name"
-                onBlur={(e) => {
-                  ui.set({ sceneName: e.target.value.trim() || "Untitled scene" });
-                  setRenaming(false);
-                }}
-                onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-              />
-            ) : (
-              <span className="doc__name">{ui.sceneName}</span>
-            )}
-            <span className="doc__meta">{formatTitle(format)}</span>
-          </div>
+          <SceneMenu format={formatTitle(format)} />
         </div>
         <div className="topbar__right">
           <div className="btn-group" role="group" aria-label="History">
@@ -228,6 +212,7 @@ export function App() {
 
       {ui.dialog === "export" && <ExportDialog onClose={() => ui.set({ dialog: null })} onBusy={setExporting} />}
       {ui.dialog === "gallery" && <GalleryDialog onClose={() => ui.set({ dialog: null })} />}
+      {(ui.dialog === "setups" || ui.dialog === "save-setup") && <SetupsDialog key={ui.dialog} mode={ui.dialog === "save-setup" ? "save" : "list"} onClose={() => ui.set({ dialog: null })} />}
 
       {ui.toast && !ui.dialog && (
         <div className={`toast${ui.toast.tone === "danger" ? " toast--danger" : ""}`} role="status" key={ui.toast.id}>
