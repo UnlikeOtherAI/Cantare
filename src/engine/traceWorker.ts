@@ -20,10 +20,12 @@ export interface TraceRequest {
   camera: { position: number[]; quaternion: number[]; fov: number; aspect: number; near: number; far: number };
   fStop: number | null;
   focusDistance: number;
+  mobile: boolean;
 }
 
 export type TraceMessage =
-  | { type: "stage"; id: number; stage: "preparing" | "tracing" }
+  | { type: "device"; id: number; gpu: string }
+  | { type: "stage"; id: number; stage: "preparing" | "tracing"; elapsed: number }
   | { type: "progress"; id: number; samples: number; total: number }
   | { type: "done"; id: number; width: number; height: number; pixels: Uint16Array }
   | { type: "error"; id: number; message: string; cancelled?: boolean };
@@ -41,11 +43,22 @@ function rendererFor(width: number, height: number) {
   return renderer;
 }
 
+function gpuName(gl: THREE.WebGLRenderer) {
+  const context = gl.getContext();
+  const info = context.getExtension("WEBGL_debug_renderer_info");
+  const raw = String(info ? context.getParameter(info.UNMASKED_RENDERER_WEBGL) : context.getParameter(context.RENDERER));
+  // "ANGLE (AMD, AMD Radeon 780M Graphics (0x…) Direct3D11 …)" → "AMD Radeon 780M Graphics"
+  const angle = raw.match(/ANGLE \([^,]+, ([^(,]+)/);
+  return (angle ? angle[1] : raw).trim();
+}
+
 const post = (message: TraceMessage, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(message, transfer);
 
 async function render(request: TraceRequest) {
   const { id, width, height } = request;
+  const started = performance.now();
   const gl = rendererFor(width, height);
+  post({ type: "device", id, gpu: gpuName(gl) });
   const { group, dispose } = restoreScene(request.scene);
   const scene = new THREE.Scene();
   scene.add(group);
@@ -84,7 +97,8 @@ async function render(request: TraceRequest) {
       fStop: request.fStop,
       focusDistance: request.focusDistance,
       signal: abort.signal,
-      onStage: (stage) => post({ type: "stage", id, stage }),
+      mobile: request.mobile,
+      onStage: (stage) => post({ type: "stage", id, stage, elapsed: performance.now() - started }),
       onProgress: (samples, total) => post({ type: "progress", id, samples, total })
     });
 

@@ -5,7 +5,15 @@ import type { TraceMessage, TraceRequest } from "./traceWorker";
 
 let worker: Worker | null = null;
 let nextId = 1;
-const jobs = new Map<number, { resolve(value: { width: number; height: number; pixels: Uint16Array }): void; reject(error: Error): void; onStage?(stage: "preparing" | "tracing"): void; onProgress?(samples: number, total: number): void }>();
+interface Job {
+  resolve(value: { width: number; height: number; pixels: Uint16Array }): void;
+  reject(error: Error): void;
+  onStage?(stage: "preparing" | "tracing", elapsed: number): void;
+  onProgress?(samples: number, total: number): void;
+  onDevice?(gpu: string): void;
+}
+
+const jobs = new Map<number, Job>();
 
 function workerInstance() {
   if (!worker) {
@@ -14,7 +22,8 @@ function workerInstance() {
       const message = event.data;
       const job = jobs.get(message.id);
       if (!job) return;
-      if (message.type === "stage") job.onStage?.(message.stage);
+      if (message.type === "device") job.onDevice?.(message.gpu);
+      else if (message.type === "stage") job.onStage?.(message.stage, message.elapsed);
       else if (message.type === "progress") job.onProgress?.(message.samples, message.total);
       else {
         jobs.delete(message.id);
@@ -35,12 +44,12 @@ function workerInstance() {
 export function traceInWorker(
   request: Omit<TraceRequest, "type" | "id">,
   transfer: Transferable[],
-  options: { onStage?(stage: "preparing" | "tracing"): void; onProgress?(samples: number, total: number): void; signal?: AbortSignal }
+  options: Pick<Job, "onStage" | "onProgress" | "onDevice"> & { signal?: AbortSignal }
 ): Promise<{ width: number; height: number; pixels: Uint16Array }> {
   const id = nextId++;
   const w = workerInstance();
   return new Promise((resolve, reject) => {
-    jobs.set(id, { resolve, reject, onStage: options.onStage, onProgress: options.onProgress });
+    jobs.set(id, { resolve, reject, onStage: options.onStage, onProgress: options.onProgress, onDevice: options.onDevice });
     options.signal?.addEventListener("abort", () => w.postMessage({ type: "cancel", id }), { once: true });
     w.postMessage({ ...request, type: "render", id }, transfer);
   });

@@ -729,3 +729,13 @@ button.doc { align-items: center; text-align: left; }
   .gallery.setups { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: var(--s-6); gap: var(--s-5); }
   .setup-view__art { width: min(200px, 60%); }
 }
+
+/* Photoreal render progress: steps, so a long render never looks stuck */
+.progress__bar--busy span { width: 35%; animation: splash 1.4s var(--m-ease-inout) infinite alternate; }
+.render-steps { list-style: none; margin: var(--s-2) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-4); }
+.render-steps li { display: flex; gap: var(--s-4); align-items: flex-start; color: var(--c-text-3); }
+.render-steps li.is-active { color: var(--c-text-1); }
+.render-steps li.is-done { color: var(--c-text-2); }
+.render-steps__mark { flex: none; width: 16px; height: 16px; display: grid; place-items: center; margin-top: 1px; }
+.render-steps__mark svg { width: 14px; height: 14px; fill: none; stroke: var(--c-success); stroke-width: 2; }
+.render-steps__hint { display: block; margin-top: 2px; color: var(--c-text-3); font-size: var(--t-12); }
