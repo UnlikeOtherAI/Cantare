@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Cantare</string>
+    <string name="title_activity_main">Cantare</string>
+    <string name="package_name">com.unlikeotherai.cantare</string>
+    <string name="custom_url_scheme">com.unlikeotherai.cantare</string>
+</resources>

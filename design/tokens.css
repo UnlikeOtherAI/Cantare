@@ -1,0 +1,208 @@
+/* ============================================================================
+   Cantare design tokens
+   ----------------------------------------------------------------------------
+   One dark "darkroom" theme ships in v1. The stage (the photo) can be any
+   brightness; the chrome around it stays dark so the render is always the
+   brightest, most saturated thing on screen.
+
+   Naming: --c-* colour, --t-* type, --s-* space, --r-* radius, --sh-* shadow,
+   --m-* motion, --z-* layer, --size-* fixed component sizes.
+   ============================================================================ */
+
+:root {
+  color-scheme: dark;
+
+  /* ---- Colour: surfaces (warm-neutral greys, never blue-black) ------------ */
+  --c-bg-0: #0d0e10;              /* app shell, top bar, rail                  */
+  --c-bg-1: #131417;              /* panel, sheet                              */
+  --c-bg-2: #1a1c20;              /* inputs, cards, tiles                      */
+  --c-bg-3: #22252a;              /* hover on bg-2, pressed segments           */
+  --c-bg-4: #2b2f35;              /* active segment, slider track filled area  */
+  --c-scrim: rgba(8, 9, 10, 0.64);           /* behind dialogs / sheets       */
+  --c-glass: rgba(19, 20, 23, 0.78);         /* HUD chips over the stage      */
+  --c-glass-border: rgba(255, 255, 255, 0.08);
+
+  /* ---- Colour: stage defaults (the neutral backdrop before a background) -- */
+  --c-stage-hi: #34373c;
+  --c-stage-lo: #0f1012;
+  --c-stage-floor: #1b1d21;
+
+  /* ---- Colour: lines ------------------------------------------------------ */
+  --c-line-1: rgba(255, 255, 255, 0.06);     /* dividers inside a surface     */
+  --c-line-2: rgba(255, 255, 255, 0.10);     /* control borders               */
+  --c-line-3: rgba(255, 255, 255, 0.18);     /* hovered / focused borders     */
+
+  /* ---- Colour: text ------------------------------------------------------- */
+  --c-text-1: #f1f0ec;                       /* primary (slightly warm)       */
+  --c-text-2: rgba(241, 240, 236, 0.64);     /* secondary, labels             */
+  --c-text-3: rgba(241, 240, 236, 0.42);     /* tertiary, hints, units        */
+  --c-text-4: rgba(241, 240, 236, 0.26);     /* disabled                      */
+  --c-text-on-accent: #1b1305;
+
+  /* ---- Colour: accent "tungsten" (lighting metaphor, used sparingly) ------ */
+  --c-accent: #f0b23f;
+  --c-accent-hover: #ffc457;
+  --c-accent-press: #d99a26;
+  --c-accent-soft: rgba(240, 178, 63, 0.14);  /* selected row / chip fill     */
+  --c-accent-line: rgba(240, 178, 63, 0.55);  /* selected border              */
+  --c-accent-glow: rgba(240, 178, 63, 0.45);  /* light gizmo halo             */
+
+  /* ---- Colour: tool hues (cursors and gizmos only, never chrome) ---------- */
+  --c-water: #6fd1ff;                        /* water brush / spray cursor    */
+  --c-water-soft: rgba(111, 209, 255, 0.18);
+  --c-artwork: #c48bff;                      /* label handles                 */
+
+  /* ---- Colour: semantic --------------------------------------------------- */
+  --c-success: #5fd39a;
+  --c-success-soft: rgba(95, 211, 154, 0.14);
+  --c-warning: #f0b23f;                      /* shares the accent hue by design: a warning is a thing to look at, shown with an icon */
+  --c-warning-soft: rgba(240, 178, 63, 0.14);
+  --c-danger: #ff5d5d;
+  --c-danger-soft: rgba(255, 93, 93, 0.14);
+  --c-focus: var(--c-accent);
+
+  /* ---- Colour: can presets (UI swatches; the renderer has its own PBR values) */
+  --c-can-silver: #c9cbcf;
+  --c-can-gold: #d4a84b;
+  --c-can-black: #16171a;
+  --c-can-white: #f2f1ee;
+
+  /* ---- Typography ---------------------------------------------------------- */
+  --t-sans: "Instrument Sans", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --t-serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;   /* wordmark + display moments only */
+  --t-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; /* values, hex, dimensions */
+
+  --t-11: 11px;  --t-11-lh: 14px;   /* micro: units, badges, rail labels      */
+  --t-12: 12px;  --t-12-lh: 16px;   /* caption, section labels (uppercase)    */
+  --t-13: 13px;  --t-13-lh: 18px;   /* UI default on pointer devices          */
+  --t-14: 14px;  --t-14-lh: 20px;   /* UI default on touch, panel body        */
+  --t-15: 15px;  --t-15-lh: 20px;   /* phone body                             */
+  --t-16: 16px;  --t-16-lh: 22px;   /* panel titles, dialog titles            */
+  --t-20: 20px;  --t-20-lh: 26px;   /* display small                          */
+  --t-28: 28px;  --t-28-lh: 32px;   /* display (serif), empty-state heading   */
+  --t-40: 40px;  --t-40-lh: 44px;   /* splash wordmark                        */
+
+  --t-ui: var(--t-13);              /* switches to 14 on touch / 15 on phone  */
+  --t-ui-lh: var(--t-13-lh);
+  --t-weight-regular: 400;
+  --t-weight-medium: 500;
+  --t-weight-semibold: 600;
+  --t-tracking-caps: 0.06em;        /* uppercase section labels               */
+  --t-tracking-tight: -0.01em;      /* titles ≥ 16px                          */
+
+  /* ---- Spacing (4px base) ------------------------------------------------- */
+  --s-1: 2px;  --s-2: 4px;  --s-3: 6px;  --s-4: 8px;  --s-5: 12px;
+  --s-6: 16px; --s-7: 20px; --s-8: 24px; --s-9: 32px; --s-10: 40px; --s-11: 48px;
+  --s-panel-x: 16px;                /* horizontal inset of panel content      */
+  --s-panel-gap: 20px;              /* gap between control groups             */
+  --s-control-gap: 8px;             /* gap between controls in a group        */
+
+  /* ---- Radii -------------------------------------------------------------- */
+  --r-1: 4px;   /* checkbox, tiny chips, slider thumb square-ish states       */
+  --r-2: 6px;   /* segmented control items, swatches                          */
+  --r-3: 8px;   /* buttons, inputs, selects, chips                            */
+  --r-4: 12px;  /* cards, tiles, format rows, dropzone                        */
+  --r-5: 16px;  /* dialog, bottom sheet, popovers                             */
+  --r-pill: 999px;
+
+  /* ---- Shadows (dark UI: shadows are mostly borders + ambient) ----------- */
+  --sh-1: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sh-2: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 8px 24px rgba(0, 0, 0, 0.45);
+  --sh-3: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 64px rgba(0, 0, 0, 0.6);
+  --sh-sheet: 0 -1px 0 rgba(255, 255, 255, 0.08), 0 -12px 40px rgba(0, 0, 0, 0.5);
+  --sh-focus: 0 0 0 2px var(--c-bg-1), 0 0 0 4px var(--c-focus);
+  --sh-glow-accent: 0 0 0 4px var(--c-accent-soft), 0 0 24px var(--c-accent-glow);
+
+  /* ---- Motion ------------------------------------------------------------- */
+  --m-fast: 120ms;      /* hover, press, toggles                               */
+  --m-base: 200ms;      /* panel switch, chip select, popover                  */
+  --m-slow: 320ms;      /* sheet detents, dialogs, camera quick-angle          */
+  --m-can: 600ms;       /* can format morph, colour crossfade                  */
+  --m-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);     /* enter, expand           */
+  --m-ease-in: cubic-bezier(0.4, 0, 1, 1);          /* exit, collapse          */
+  --m-ease-inout: cubic-bezier(0.65, 0, 0.35, 1);   /* camera moves, morphs    */
+  --m-spring: cubic-bezier(0.34, 1.3, 0.64, 1);     /* sheet snap, gizmo drop  */
+
+  /* ---- Z layers ----------------------------------------------------------- */
+  --z-stage: 0;
+  --z-stage-hud: 10;     /* angle chips, stage toolbar, gizmo overlays         */
+  --z-panel: 20;         /* side panel / bottom sheet                          */
+  --z-rail: 30;          /* tool rail / bottom tool strip                      */
+  --z-topbar: 40;
+  --z-popover: 50;       /* colour picker, format picker (desktop), menus      */
+  --z-dialog: 60;        /* export, gallery viewer                             */
+  --z-toast: 70;
+  --z-splash: 80;
+
+  /* ---- Fixed sizes -------------------------------------------------------- */
+  --size-topbar: 48px;
+  --size-rail: 56px;                 /* desktop/tablet-wide vertical rail      */
+  --size-rail-item: 40px;            /* icon button inside the rail            */
+  --size-panel: 320px;               /* ≥1280                                   */
+  --size-panel-narrow: 288px;        /* 1025–1279                               */
+  --size-panel-header: 48px;
+  --size-toolstrip: 64px;            /* compact bottom tool strip (+ safe area) */
+  --size-sheet-handle-w: 36px;
+  --size-sheet-handle-h: 4px;
+  --size-sheet-peek: 56px;           /* sheet header only                       */
+  --size-sheet-half: 44dvh;
+  --size-sheet-full: 62dvh;          /* never more: the can must stay visible   */
+  --size-control: 32px;              /* pointer-device control height           */
+  --size-control-touch: 44px;        /* touch control height / min hit target   */
+  --size-control-sm: 24px;
+  --size-icon: 20px;
+  --size-icon-sm: 16px;
+  --size-swatch: 28px;
+  --size-swatch-touch: 36px;
+  --size-slider-track: 4px;
+  --size-slider-thumb: 16px;
+  --size-slider-thumb-touch: 24px;
+  --size-value-field: 56px;          /* numeric field right of a slider        */
+  --size-tile: 72px;                 /* quick-angle / environment tile height   */
+  --size-gizmo-handle: 18px;         /* key-light handle on the stage           */
+  --size-gizmo-handle-touch: 28px;
+  --size-dropzone: 112px;
+  --size-toast-w: 360px;
+  --size-dialog-w: 480px;
+  --size-dialog-w-lg: 720px;
+
+  /* ---- Safe areas ----------------------------------------------------------- */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+/* Touch devices: larger type and hit targets. Applied by capability, not width,
+   so an iPad with a trackpad still gets the comfortable sizes.                  */
+@media (pointer: coarse) {
+  :root {
+    --t-ui: var(--t-14);
+    --t-ui-lh: var(--t-14-lh);
+    --size-control: var(--size-control-touch);
+    --size-swatch: var(--size-swatch-touch);
+    --size-slider-thumb: var(--size-slider-thumb-touch);
+    --size-gizmo-handle: var(--size-gizmo-handle-touch);
+    --s-panel-gap: 24px;
+    --s-control-gap: 10px;
+  }
+}
+
+/* Phone portrait: one notch bigger body text, tighter horizontal insets.        */
+@media (max-width: 480px) {
+  :root {
+    --t-ui: var(--t-15);
+    --t-ui-lh: var(--t-15-lh);
+    --size-topbar: 44px;
+    --s-panel-x: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --m-fast: 0ms;
+    --m-base: 0ms;
+    --m-slow: 0ms;
+    --m-can: 0ms;
+  }
+}
