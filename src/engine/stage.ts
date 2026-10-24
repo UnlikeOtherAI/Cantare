@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { TransformControls } from "three/addons/controls/TransformControls.js";
 import {
   BloomEffect,
   BrightnessContrastEffect,
@@ -112,6 +113,8 @@ export class CanStage {
   /** Artwork tool drags: rotation in degrees and vertical offset in mm. */
   onArtworkDrag: ((rotation: number, offset: number) => void) | null = null;
   onFocusPicked: ((point: [number, number, number]) => void) | null = null;
+  /** Rotation gizmo drags: degrees, Euler XZY so spin stays around the can's own axis. */
+  onOrientationDrag: ((orientation: { pitch: number; spin: number; roll: number }) => void) | null = null;
 
   private scene = new THREE.Scene();
   private composer: EffectComposer;
@@ -126,7 +129,12 @@ export class CanStage {
   private pmrem: THREE.PMREMGenerator;
   private envTarget: THREE.WebGLRenderTarget | null = null;
 
+  /** The can's pose: tilt and spin about its centre, lifted to rest on the floor. */
   private spinGroup = new THREE.Group();
+  private gizmo: TransformControls;
+  private gizmoProxy = new THREE.Object3D();
+  private gizmoDragging = false;
+  private reflectionClone: THREE.Object3D | null = null;
   private canGroup = new THREE.Group();
   private lidGroup = new THREE.Group();
   private reflection = new THREE.Group();
@@ -269,6 +277,28 @@ export class CanStage {
     this.scene.add(this.keyLight, this.keyLight.target, this.ground, this.contact, this.reflection, this.spinGroup);
     this.spinGroup.add(this.canGroup);
 
+    // Red/green/blue rings: X and Z tilt the can, Y spins it around its own axis.
+    this.gizmo = new TransformControls(this.camera, canvas);
+    this.gizmo.setMode("rotate");
+    this.gizmo.setSpace("local");
+    this.gizmo.showE = false;
+    this.gizmo.showXYZE = false;
+    this.gizmo.size = 2.1;
+    this.gizmo.attach(this.gizmoProxy);
+    this.gizmo.enabled = false;
+    this.gizmo.getHelper().visible = false;
+    this.scene.add(this.gizmoProxy, this.gizmo.getHelper());
+    this.gizmo.addEventListener("dragging-changed", (event) => {
+      this.gizmoDragging = Boolean(event.value);
+      this.controls.enabled = !this.gizmoDragging;
+    });
+    this.gizmo.addEventListener("change", () => this.invalidate());
+    this.gizmo.addEventListener("objectChange", () => {
+      const e = new THREE.Euler().setFromQuaternion(this.gizmoProxy.quaternion, "XZY");
+      const deg = THREE.MathUtils.radToDeg;
+      this.onOrientationDrag?.({ pitch: deg(e.x), spin: (((deg(e.y) - this.turntableAngle) % 360) + 360) % 360, roll: deg(e.z) });
+    });
+
     this.bodyMaterial.map = this.bodyColor;
     this.bodyMaterial.roughnessMap = this.bodyOrm;
     this.bodyMaterial.metalnessMap = this.bodyOrm;
@@ -314,6 +344,13 @@ export class CanStage {
     this.canvas.style.cursor = mode === "orbit" ? "grab" : mode === "artwork" ? "ew-resize" : mode === "focus" ? "crosshair" : "none";
   }
 
+  /** Show the rotation gizmo on the can (the Camera tool). */
+  setGizmo(on: boolean) {
+    this.gizmo.enabled = on;
+    this.gizmo.getHelper().visible = on;
+    this.invalidate();
+  }
+
   setTurntable(on: boolean) {
     this.turntable = on;
     this.invalidate();
@@ -349,7 +386,7 @@ export class CanStage {
       this.refreshBackground();
     }
     if (!prev || prev.focalLength !== next.focalLength) this.applyLens(next.focalLength, !!prev);
-    this.spinGroup.rotation.y = THREE.MathUtils.degToRad(next.spin + this.turntableAngle);
+    this.applyPose();
     this.rebuildReflection();
     this.emitInfo();
     this.invalidate();
@@ -366,13 +403,14 @@ export class CanStage {
     };
     const a = angles[preset];
     this.autoFrame = preset;
-    const target = new THREE.Vector3(0, a.ty, 0);
+    // Follow the can when it is lifted or resting tilted.
+    const target = new THREE.Vector3(0, a.ty + (this.spinGroup.position.y - H / 2), 0);
     this.moveCamera(new THREE.Vector3().setFromSphericalCoords(a.dist, a.polar, a.az).add(target), target, animate);
   }
 
   /** Keep the camera's direction but frame the whole can again. */
   frameCan() {
-    const target = new THREE.Vector3(0, this.format.height * 0.5, 0);
+    const target = this.spinGroup.position.clone();
     const dir = this.camera.position.clone().sub(this.controls.target).normalize();
     this.moveCamera(target.clone().add(dir.multiplyScalar(this.fitDistance())), target, true);
   }
@@ -422,7 +460,7 @@ export class CanStage {
     const placement = this.placement;
     if (!placement || this.settings?.artwork.mode !== "label") return null;
     const R = this.format.bodyDiameter / 2;
-    const toCamera = this.spinGroup.worldToLocal(this.camera.position.clone()).setY(0).normalize().multiplyScalar(R);
+    const toCamera = this.canGroup.worldToLocal(this.camera.position.clone()).setY(0).normalize().multiplyScalar(R);
     const top = this.project(toCamera.clone().setY(placement.bottom + placement.height));
     const bottom = this.project(toCamera.clone().setY(placement.bottom));
     const mid = this.project(new THREE.Vector3(0, placement.bottom, 0));
@@ -446,6 +484,9 @@ export class CanStage {
     const height = Math.round(options.height * scale);
     const ratio = this.renderer.getPixelRatio();
     const background = this.scene.background;
+    const helper = this.gizmo.getHelper();
+    const gizmoVisible = helper.visible;
+    helper.visible = false;
 
     this.renderer.setPixelRatio(1);
     this.renderer.setSize(width, height, false);
@@ -464,6 +505,7 @@ export class CanStage {
     const blob = await new Promise<Blob | null>((resolve) => this.canvas.toBlob(resolve, options.type, options.quality ?? 0.95));
 
     this.scene.background = background;
+    helper.visible = gizmoVisible;
     this.renderer.setClearColor(0x000000, 1);
     this.renderer.setPixelRatio(ratio);
     this.resize(this.viewSize.x, this.viewSize.y);
@@ -504,7 +546,7 @@ export class CanStage {
     if (this.controls.update()) this.frames = Math.max(this.frames, 1);
     if (this.turntable && !this.pointers.size) {
       this.turntableAngle = (this.turntableAngle + dt * 18) % 360;
-      this.spinGroup.rotation.y = THREE.MathUtils.degToRad((this.settings?.spin ?? 0) + this.turntableAngle);
+      this.applyPose();
       this.frames = Math.max(this.frames, 1);
     }
     const water = this.settings?.water;
@@ -528,14 +570,14 @@ export class CanStage {
   };
 
   private project(point: THREE.Vector3): THREE.Vector2 {
-    const p = this.spinGroup.localToWorld(point.clone()).project(this.camera);
+    const p = this.canGroup.localToWorld(point.clone()).project(this.camera);
     return new THREE.Vector2(((p.x + 1) / 2) * this.viewSize.x, ((1 - p.y) / 2) * this.viewSize.y);
   }
 
   /** A point offset sideways from `at`, perpendicular to the view, in spin-group space. */
   private sideways(at: THREE.Vector3, distance: number) {
     const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0).setY(0).normalize();
-    right.applyQuaternion(this.spinGroup.quaternion.clone().invert());
+    right.applyQuaternion(this.canGroup.getWorldQuaternion(new THREE.Quaternion()).invert());
     return at.clone().add(right.multiplyScalar(distance));
   }
 
@@ -556,9 +598,10 @@ export class CanStage {
       this.dof.target = new THREE.Vector3(...fx.focusPoint);
       return;
     }
-    const toCamera = this.camera.position.clone().setY(0).normalize();
+    const toCamera = this.camera.position.clone().sub(this.spinGroup.position).setY(0).normalize();
     const R = this.format.bodyDiameter / 2;
-    this.dof.target = fx.focus === "lid" ? new THREE.Vector3(0, H, 0).addScaledVector(toCamera, R * 0.3) : new THREE.Vector3(0, H * 0.5, 0).addScaledVector(toCamera, R);
+    const lid = this.canGroup.localToWorld(new THREE.Vector3(0, H, 0));
+    this.dof.target = fx.focus === "lid" ? lid.addScaledVector(toCamera, R * 0.3) : this.spinGroup.position.clone().addScaledVector(toCamera, R);
   }
 
   /** Lights are set relative to the camera; turn them with it. */
@@ -898,14 +941,45 @@ export class CanStage {
     this.invalidate();
   }
 
+  /**
+   * Tilt and spin about the can's centre (Euler XZY: spin first, around the can's own
+   * axis), then lift it so its lowest point rests on the floor, plus any float.
+   */
+  private applyPose() {
+    const s = this.settings;
+    if (!s) return;
+    const rad = THREE.MathUtils.degToRad;
+    const H = this.format.height;
+    const R = this.format.bodyDiameter / 2;
+    this.canGroup.position.y = -H / 2;
+    this.spinGroup.rotation.set(rad(s.tilt.pitch), rad(s.spin + this.turntableAngle), rad(s.tilt.roll), "XZY");
+    const axis = new THREE.Vector3(0, 1, 0).applyQuaternion(this.spinGroup.quaternion);
+    const rest = (H / 2) * Math.abs(axis.y) + R * Math.sqrt(Math.max(0, 1 - axis.y * axis.y));
+    this.spinGroup.position.set(0, rest + s.lift, 0);
+    this.spinGroup.updateMatrixWorld(true);
+    // The baked contact shadow only fits an upright can standing on the floor.
+    const upright = Math.abs(axis.y) > 0.999 && s.lift < 0.5;
+    this.contact.visible = upright && this.ground.visible;
+    if (this.reflectionClone) {
+      this.reflectionClone.position.copy(this.spinGroup.position);
+      this.reflectionClone.quaternion.copy(this.spinGroup.quaternion);
+    }
+    if (!this.gizmoDragging) {
+      this.gizmoProxy.position.copy(this.spinGroup.position);
+      this.gizmoProxy.quaternion.copy(this.spinGroup.quaternion);
+    }
+  }
+
   /** Mirror the can under the floor for glossy-surface shots, fading with depth. */
   private rebuildReflection() {
     for (const child of [...this.reflection.children]) this.reflection.remove(child);
+    this.reflectionClone = null;
     const fx = this.settings?.effects;
     const strength = fx && fx.groundEnabled ? fx.reflection : 0;
     if (strength <= 0.001) return;
     const fade = this.format.height * (0.15 + (1 - (fx?.reflectionFade ?? 0.5)) * 0.6);
     const clone = this.spinGroup.clone(true);
+    this.reflectionClone = clone;
     clone.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -932,7 +1006,7 @@ export class CanStage {
       mesh.castShadow = false;
       mesh.receiveShadow = false;
     });
-    clone.scale.y = -1;
+    this.reflection.scale.y = -1;
     this.reflection.add(clone);
   }
 

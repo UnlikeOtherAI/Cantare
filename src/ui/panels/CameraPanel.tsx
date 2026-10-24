@@ -56,6 +56,8 @@ function Dial({ value, onChange }: { value: number; onChange(v: number): void })
 
 export function CameraPanel() {
   const spin = useEditor((s) => s.settings.spin);
+  const tilt = useEditor((s) => s.settings.tilt);
+  const lift = useEditor((s) => s.settings.lift);
   const focalLength = useEditor((s) => s.settings.focalLength);
   const set = useEditor((s) => s.set);
   const { angle, turntable, view } = useUi();
@@ -74,7 +76,7 @@ export function CameraPanel() {
       </Group>
 
       <Group
-        title="Can spin"
+        title="Can orientation"
         action={
           <Toggle
             label="Turntable"
@@ -109,9 +111,18 @@ export function CameraPanel() {
               style={{ ["--p" as string]: `${(spin / 360) * 100}%` }}
               onChange={(e) => set("spin", Number(e.target.value))}
             />
-            <p className="help">Rotates the can, not the camera. Artwork, lid tab and droplets turn with it.</p>
+            <p className="help">Turns the can around its own axis, even when tilted. Artwork, lid tab and droplets turn with it.</p>
           </div>
         </div>
+        <Slider label="Tilt back / forward" unit="°" min={-180} max={180} value={Math.round(tilt.pitch)} onChange={(pitch) => set("tilt", { ...tilt, pitch })} />
+        <Slider label="Tilt sideways" unit="°" min={-90} max={90} value={Math.round(tilt.roll)} onChange={(roll) => set("tilt", { ...tilt, roll })} />
+        <Slider label="Lift" unit="mm" min={0} max={120} value={Math.round(lift)} onChange={(v) => set("lift", v)} />
+        <p className="help">Drag the red and blue rings on the can to tip it any way, the green ring to spin it. A tilted can rests on its edge; lift it to float.</p>
+        {(tilt.pitch !== 0 || tilt.roll !== 0 || lift !== 0) && (
+          <button className="link-btn" type="button" style={{ alignSelf: "flex-start" }} onClick={() => (set("tilt", { pitch: 0, roll: 0 }), set("lift", 0))}>
+            Stand the can upright
+          </button>
+        )}
       </Group>
 
       <Group title="Lens">
@@ -136,6 +147,8 @@ export function CameraPanel() {
           onClick={() => {
             set("focalLength", 70);
             set("spin", 0);
+            set("tilt", { pitch: 0, roll: 0 });
+            set("lift", 0);
             goToAngle("three-quarter");
           }}
         >

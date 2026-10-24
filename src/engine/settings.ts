@@ -133,8 +133,12 @@ export interface CanSettings {
   water: WaterSettings;
   effects: EffectSettings;
   background: BackgroundSettings;
-  /** Degrees; spins the can on its own axis. */
+  /** Degrees; spins the can on its own axis (applies after the tilt). */
   spin: number;
+  /** Degrees; tips the can towards/away from the camera (pitch) and sideways (roll). */
+  tilt: { pitch: number; roll: number };
+  /** mm above the floor; 0 rests the can on its lowest edge. */
+  lift: number;
   /** Lens focal length in mm (full-frame equivalent). */
   focalLength: number;
 }
@@ -186,6 +190,8 @@ export const DEFAULT_SETTINGS: CanSettings = {
   },
   background: { kind: "studio", color: "#34373c", color2: "#0f1012", angle: 180, imageUrl: null, fit: "fill", blur: 0, visible: true },
   spin: 0,
+  tilt: { pitch: 0, roll: 0 },
+  lift: 0,
   focalLength: 70
 };
 

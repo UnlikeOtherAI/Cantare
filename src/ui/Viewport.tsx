@@ -49,6 +49,11 @@ export function Stage({ exporting }: { exporting: string | null }) {
       useEditor.getState().patch("effects", { focus: "point", focusPoint, dofEnabled: true });
       useUi.getState().set({ pickingFocus: false });
     };
+    stage.onOrientationDrag = ({ pitch, spin, roll }) => {
+      const { set } = useEditor.getState();
+      set("tilt", { pitch: Math.round(pitch * 10) / 10, roll: Math.round(roll * 10) / 10 });
+      set("spin", Math.round(spin));
+    };
     stage.controls.addEventListener("start", () => useUi.getState().set({ angle: null }));
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
@@ -76,6 +81,7 @@ export function Stage({ exporting }: { exporting: string | null }) {
         ? "artwork"
         : "orbit";
   useEffect(() => activeStage?.setInteraction(interaction), [interaction]);
+  useEffect(() => activeStage?.setGizmo(ui.tool === "camera"), [ui.tool]);
 
   // Keep the can centred in the part of the stage the sheet and HUD leave visible.
   useEffect(() => {
