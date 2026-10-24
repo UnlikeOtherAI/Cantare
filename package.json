@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b",
-    "test": "vitest run"
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.server.json",
+    "test": "vitest run",
+    "server": "node server/index.ts",
+    "cap:sync": "pnpm build && cap sync"
   },
   "dependencies": {
     "@capacitor-community/media": "^9.1.0",

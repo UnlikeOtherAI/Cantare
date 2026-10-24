@@ -1,12 +1,15 @@
 /** Fixed-window limiter per client key. In-memory: one server process. */
 export class RateLimiter {
   private windows = new Map<string, { start: number; count: number }>();
+  private limit: number;
+  private windowMs: number;
+  private now: () => number;
 
-  constructor(
-    private limit: number,
-    private windowMs: number,
-    private now: () => number = Date.now
-  ) {}
+  constructor(limit: number, windowMs: number, now: () => number = Date.now) {
+    this.limit = limit;
+    this.windowMs = windowMs;
+    this.now = now;
+  }
 
   /** Takes one unit; returns 0 when allowed, else milliseconds until the window resets. */
   take(key: string): number {
