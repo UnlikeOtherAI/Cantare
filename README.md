@@ -3,6 +3,8 @@
 Hyper-realistic beverage-can product images for the beer and soft-drink industry. Pick the can,
 upload the artwork, light it, add water, drop in a background and export.
 
+Live at https://cantare.unlikeotherai.com. Open source under the [MIT license](LICENSE).
+
 - [Product brief](docs/brief.md)
 - [Beverage can 3D reference (UK, EU, US)](docs/can-reference.md)
 - [Front-end design by Fable](design/DESIGN.md) and the [screen captures](docs/screenshots/)

@@ -3,6 +3,8 @@ import { newScene, undoSceneChange } from "../platform/persistence";
 import { useUi } from "../state/ui";
 import { Icon } from "./icons";
 
+export const REPO_URL = "https://github.com/UnlikeOtherAI/Cantare";
+
 /** The scene name in the top bar: rename, save and reuse setups, start over. */
 export function SceneMenu({ format }: { format: string }) {
   const sceneName = useUi((s) => s.sceneName);
@@ -81,6 +83,11 @@ export function SceneMenu({ format }: { format: string }) {
           <button type="button" role="menuitem" onClick={pick(startOver)}>
             New scene
           </button>
+          <span className="menu__sep" role="separator" />
+          <a role="menuitem" href={REPO_URL} target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)}>
+            <Icon name="github" />
+            Source on GitHub
+          </a>
         </div>
       )}
     </div>
