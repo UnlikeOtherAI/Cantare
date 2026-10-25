@@ -128,3 +128,25 @@ test("setups can be renamed and deleted", async ({ page }) => {
   await dialog.getByRole("button", { name: "Undo" }).click();
   await expect(dialog.getByRole("button", { name: /Renamed/ })).toBeVisible();
 });
+
+test("a new scene starts with the decoration type picked last", async ({ page }) => {
+  await page.goto("/");
+  await waitForStage(page);
+  await page.getByRole("button", { name: "Try a sample" }).click();
+  await openTool(page, "Artwork");
+  const decoration = page.getByRole("radiogroup", { name: "Decoration type" });
+  await decoration.getByRole("radio", { name: "Label" }).click();
+  await expect(decoration.getByRole("radio", { name: "Label" })).toHaveAttribute("aria-checked", "true");
+
+  await menu(page, "New scene");
+  await expect(page.locator(".doc__name")).toHaveText("Untitled scene");
+  await openTool(page, "Artwork");
+  await expect(decoration.getByRole("radio", { name: "Label" })).toHaveAttribute("aria-checked", "true");
+
+  // Also on a first visit with no scene kept.
+  await page.evaluate(() => localStorage.removeItem("cantare.scene"));
+  await page.reload();
+  await waitForStage(page);
+  await openTool(page, "Artwork");
+  await expect(decoration.getByRole("radio", { name: "Label" })).toHaveAttribute("aria-checked", "true");
+});
