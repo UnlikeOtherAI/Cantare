@@ -76,6 +76,15 @@ test("export dialog shows a live preview at the chosen size", async ({ page }) =
   await expect(page.locator(".export__frame-size")).toHaveText("2048 × 2048");
 });
 
+test("the top bar downloads a mock-up of the live view", async ({ page }) => {
+  await ready(page);
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download mock-up" }).click();
+  expect((await download).suggestedFilename()).toMatch(/^cantare-.*-mockup-1638x2048\.png$/);
+  await expect(page.getByText("Mock-up downloaded")).toBeVisible();
+  await expect(page.locator(".badge")).toHaveText("1");
+});
+
 test("water preset and haze apply", async ({ page }) => {
   await ready(page);
   await openTool(page, "Water");

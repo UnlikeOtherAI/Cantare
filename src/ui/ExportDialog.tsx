@@ -7,6 +7,7 @@ import { Field, RowToggle, Seg, Slider } from "./controls";
 import { Icon } from "./icons";
 import { formatTitle } from "./panels/CanPanel";
 import { getStage } from "./Viewport";
+import { RenderProgress, rememberDeviceStats, renderEstimate, type RenderState } from "./RenderProgress";
 
 const ASPECTS: [number, number][] = [
   [1, 1],
@@ -54,8 +55,10 @@ export function ExportDialog({ onClose, onBusy }: { onClose(): void; onBusy(text
   const [preview, setPreview] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [mode, setMode] = useState<Mode>(storedMode);
-  const [passes, setPasses] = useState(256);
+  // Phones get fewer passes by default: same look, a little more grain, much less waiting.
+  const [passes, setPasses] = useState(isNative || /iPhone|iPad|Android/i.test(navigator.userAgent) ? 128 : 256);
   const [status, setStatus] = useState<Status>({ text: "", detail: "" });
+  const [render, setRender] = useState<RenderState | null>(null);
   const abort = useRef<AbortController | null>(null);
   const max = getStage()?.maxExportSize() ?? 4096;
   const { width, height } = dims(aspect, Math.min(size, max));
@@ -108,7 +111,10 @@ export function ExportDialog({ onClose, onBusy }: { onClose(): void; onBusy(text
         setStatus({ text: `Rendering ${width} × ${height}`, detail: `Rendered on this device · ${label}` });
         blob = await stage.exportImage({ width, height, type, quality: quality / 100, transparent: alpha });
       } else {
-        setStatus({ text: "Preparing the photoreal renderer", detail: "The first render on a computer can take a minute or two. You can keep working." });
+        const startedAt = performance.now();
+        let gpu: string | null = null;
+        let prepStart = 0;
+        setRender({ step: "scene", startedAt, gpu, traceStartedAt: null, done: 0, total: passes });
         blob = await stage.renderFinal({
           width,
           height,
@@ -117,14 +123,33 @@ export function ExportDialog({ onClose, onBusy }: { onClose(): void; onBusy(text
           transparent: alpha,
           samples: passes,
           signal: controller.signal,
-          onStage: (stage) => {
-            if (stage === "tracing") setStatus({ text: `Tracing light · ${width} × ${height}`, detail: `0 of ${passes} passes` });
+          onDevice: (name) => {
+            gpu = name;
+            setRender((r) => r && { ...r, gpu: name });
+          },
+          onStage: (step) => {
+            if (step === "preparing") {
+              // Timed from the user's side, including any wait behind the warm-up.
+              if (!prepStart) prepStart = performance.now();
+              setRender((r) => r && { ...r, step: "prepare" });
+              onBusy("Starting the photoreal renderer…");
+            } else {
+              if (gpu) rememberDeviceStats(gpu, { prepMs: performance.now() - prepStart });
+              setRender((r) => r && { ...r, step: "trace", traceStartedAt: performance.now() });
+            }
           },
           onProgress: (done, total) => {
-            setProgress(Math.round((done / total) * 100));
-            setStatus({ text: `Tracing light · ${width} × ${height}`, detail: `${done} of ${total} passes` });
+            setRender((r) => r && { ...r, done, total, step: done >= total ? "finish" : "trace" });
             onBusy(`Tracing light ${Math.round((done / total) * 100)}%…`);
           }
+        });
+        setRender((r) => {
+          if (r?.traceStartedAt && gpu) {
+            const seconds = (performance.now() - r.traceStartedAt) / 1000;
+            // Normalised to a 2048 × 2560 frame so estimates carry across sizes.
+            rememberDeviceStats(gpu, { passesPerSecond: (passes / Math.max(0.1, seconds)) * ((width * height) / (2048 * 2560)) });
+          }
+          return r && { ...r, step: "finish" };
         });
       }
       const format = useUi.getState().info?.format;
@@ -147,6 +172,7 @@ export function ExportDialog({ onClose, onBusy }: { onClose(): void; onBusy(text
     } finally {
       clearInterval(tick);
       abort.current = null;
+      setRender(null);
       onBusy(null);
     }
   };
@@ -200,7 +226,7 @@ export function ExportDialog({ onClose, onBusy }: { onClose(): void; onBusy(text
                   label="Quality"
                   options={[
                     { value: "photoreal", label: "Photoreal", title: "Path traced: real reflections and soft light. Takes longer." },
-                    { value: "quick", label: "Quick", title: "Exactly what you see on the stage, in a second or two." }
+                    { value: "quick", label: "Mock-up", title: "Exactly what you see on the stage, in a second or two." }
                   ]}
                   value={mode}
                   onChange={setMode}
@@ -216,8 +242,8 @@ export function ExportDialog({ onClose, onBusy }: { onClose(): void; onBusy(text
                 )}
                 <p className="help">
                   {mode === "photoreal"
-                    ? "Traces light through the scene for the final image. More passes are cleaner and slower."
-                    : "Renders the live view at full size, almost instantly."}
+                    ? `Traces light through the scene for the final image. More passes are cleaner and slower. ${renderEstimate(passes, width * height)}`
+                    : "The live view at full size, ready in a second or two. Good for quick mock-ups and approvals."}
                 </p>
               </Field>
               <Field label="Format">
@@ -240,7 +266,7 @@ export function ExportDialog({ onClose, onBusy }: { onClose(): void; onBusy(text
               <div className="dialog__actions">
                 <button className="btn btn--primary btn--lg" type="button" onClick={run}>
                   <Icon name="download" className="btn__icon" />
-                  {isNative ? "Save to Photos" : `Download ${label}`}
+                  {mode === "photoreal" ? (isNative ? "Render and save to Photos" : `Render and download ${label}`) : isNative ? "Save mock-up to Photos" : `Download mock-up ${label}`}
                 </button>
               </div>
             </div>
@@ -248,23 +274,22 @@ export function ExportDialog({ onClose, onBusy }: { onClose(): void; onBusy(text
 
           {phase.name === "progress" && (
             <div className="export__settings">
-              <div className="progress progress--lg">
-                <div className="progress__row">
-                  <span>{status.text}</span>
-                  <span className="mono">{progress}%</span>
+              {render ? (
+                <RenderProgress state={render} onCancel={() => abort.current?.abort()} />
+              ) : (
+                <div className="progress progress--lg">
+                  <div className="progress__row">
+                    <span>{status.text}</span>
+                    <span className="mono">{progress}%</span>
+                  </div>
+                  <div className="progress__bar">
+                    <span style={{ width: `${progress}%` }} />
+                  </div>
+                  <div className="progress__row progress__row--sub">
+                    <span>{status.detail}</span>
+                  </div>
                 </div>
-                <div className="progress__bar">
-                  <span style={{ width: `${progress}%` }} />
-                </div>
-                <div className="progress__row progress__row--sub">
-                  <span>{status.detail}</span>
-                  {mode === "photoreal" && (
-                    <button className="link-btn" type="button" onClick={() => abort.current?.abort()}>
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
           )}
 

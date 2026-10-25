@@ -130,7 +130,7 @@ for (const device of Object.keys(DEVICES)) {
   await shot(page, device, "export");
   if (all) {
     const download = page.waitForEvent("download", { timeout: 120_000 });
-    await page.getByRole("button", { name: /Download PNG|Save to Photos/ }).click();
+    await page.getByRole("button", { name: /Download mock-up PNG|Save mock-up to Photos/ }).click();
     await download;
     await page.locator(".export__done").waitFor({ timeout: 120_000 });
     await settle(page, 600);
@@ -140,8 +140,18 @@ for (const device of Object.keys(DEVICES)) {
     await settle(page, 800);
     await shot(page, device, "gallery");
 
-    // Saved setups: the scene menu, saving, and the list.
+    // The one-click mock-up from the top bar, and its toast.
     await page.evaluate(() => window.__ui.getState().set({ dialog: null }));
+    await settle(page, 400);
+    const mockup = page.waitForEvent("download", { timeout: 120_000 });
+    await page.getByRole("button", { name: "Download mock-up" }).click();
+    await mockup;
+    await page.locator(".toast__text").waitFor({ timeout: 30_000 });
+    await settle(page, 400);
+    await shot(page, device, "mockup-saved");
+    await page.evaluate(() => window.__ui.getState().set({ toast: null }));
+
+    // Saved setups: the scene menu, saving, and the list.
     await settle(page, 400);
     await page.locator(".topbar__centre button").first().click();
     await settle(page, 400);

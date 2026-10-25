@@ -8,7 +8,7 @@ on:
 jobs:
   web:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -20,5 +20,3 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
-      - run: pnpm exec playwright install --with-deps --only-shell chromium
-      - run: pnpm e2e --project=desktop

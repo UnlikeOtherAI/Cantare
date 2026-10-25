@@ -43,7 +43,10 @@ export interface FinalRenderOptions extends ExportOptions {
   /** Path-tracing samples per pixel: more is cleaner and slower. */
   samples: number;
   onProgress?(samples: number, total: number): void;
-  onStage?(stage: TraceStage): void;
+  /** `elapsed` is ms since the worker picked the job up. */
+  onStage?(stage: TraceStage, elapsed: number): void;
+  /** The graphics chip doing the work, as the browser names it. */
+  onDevice?(gpu: string): void;
   signal?: AbortSignal;
 }
 
@@ -446,6 +449,7 @@ export class CanStage {
     this.camera.aspect = width / height;
     this.camera.clearViewOffset();
     this.camera.updateProjectionMatrix();
+    const restoreFraming = this.frameForExport();
     if (options.transparent) {
       this.scene.background = null;
       this.renderer.setClearColor(0x000000, 0);
@@ -458,6 +462,7 @@ export class CanStage {
 
     this.scene.background = background;
     helper.visible = gizmoVisible;
+    restoreFraming();
     this.renderer.setClearColor(0x000000, 1);
     this.renderer.setPixelRatio(ratio);
     this.resize(this.viewSize.x, this.viewSize.y);
@@ -516,7 +521,8 @@ export class CanStage {
             far: this.camera.far
           },
           fStop: fx.dofEnabled ? fx.aperture : null,
-          focusDistance: this.camera.position.distanceTo(this.dof.target ?? this.spinGroup.position)
+          focusDistance: this.camera.position.distanceTo(this.dof.target ?? this.spinGroup.position),
+          mobile: isMobile()
         };
         return { plate, mask, request, transfer };
       });
@@ -524,7 +530,10 @@ export class CanStage {
       if (mask) disposables.push(mask);
 
       // 2. In the worker: the can, path traced. The live view keeps running meanwhile.
-      const traced = await traceInWorker(request, transfer, { onStage: options.onStage, onProgress: options.onProgress, signal: options.signal });
+      // The job may wait behind a warm-up that is already compiling: from the user's
+      // side that is all "starting the renderer".
+      options.onStage?.("preparing", 0);
+      const traced = await traceInWorker(request, transfer, { onStage: options.onStage, onProgress: options.onProgress, onDevice: options.onDevice, signal: options.signal });
       const tracedTexture = new THREE.DataTexture(traced.pixels, traced.width, traced.height, THREE.RGBAFormat, THREE.HalfFloatType);
       tracedTexture.needsUpdate = true;
       disposables.push(tracedTexture);
@@ -562,6 +571,7 @@ export class CanStage {
     const background = this.scene.background;
     const helper = this.gizmo.getHelper();
     const gizmoVisible = helper.visible;
+    let restoreFraming = () => {};
     try {
       helper.visible = false;
       this.renderer.setPixelRatio(1);
@@ -569,6 +579,7 @@ export class CanStage {
       this.camera.aspect = width / height;
       this.camera.clearViewOffset();
       this.camera.updateProjectionMatrix();
+      restoreFraming = this.frameForExport();
       this.droplets?.render();
       this.orientLights();
       this.updateFocus();
@@ -582,6 +593,7 @@ export class CanStage {
     } finally {
       this.scene.background = background;
       helper.visible = gizmoVisible;
+      restoreFraming();
       this.renderer.setRenderTarget(null);
       this.renderer.setClearColor(0x000000, 1);
       this.renderer.setPixelRatio(ratio);
@@ -626,6 +638,27 @@ export class CanStage {
     for (const [mesh, material] of swapped) mesh.material = material;
     for (const m of [black, drops, haze]) m.dispose();
     return target;
+  }
+
+  /**
+   * Exports have their own shape and no sheet or HUD over them. While the camera is on
+   * an automatic framing, frame the can for the export instead of reusing the live
+   * view's distance (on a phone that was set for a short strip above the sheet). A
+   * manual zoom or orbit is kept as the user left it.
+   */
+  private frameForExport(): () => void {
+    if (!this.autoFrame) return () => {};
+    const insets = this.insets;
+    const position = this.camera.position.clone();
+    const target = this.controls.target.clone();
+    this.insets = { top: 0, bottom: 0 };
+    this.setCameraPreset(this.autoFrame, false);
+    return () => {
+      this.insets = insets;
+      this.camera.position.copy(position);
+      this.controls.target.copy(target);
+      this.controls.update();
+    };
   }
 
   maxExportSize() {

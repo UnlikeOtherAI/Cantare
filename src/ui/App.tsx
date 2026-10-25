@@ -13,6 +13,7 @@ import { listGallery } from "../platform/gallery";
 import { useEditor } from "../state/editor";
 import { TOOLS, useUi, type Sheet, type Tool } from "../state/ui";
 import { ExportDialog } from "./ExportDialog";
+import { downloadMockup } from "./mockup";
 import { GalleryDialog } from "./GalleryDialog";
 import { Icon, IconSprite, type IconName } from "./icons";
 import { ArtworkPanel } from "./panels/ArtworkPanel";
@@ -168,6 +169,9 @@ export function App() {
               <Icon name="redo" />
             </button>
           </div>
+          <button className="icon-btn topbar__mockup" type="button" title="Download mock-up: the live view, instantly" aria-label="Download mock-up" onClick={downloadMockup}>
+            <Icon name="download" />
+          </button>
           <button className="icon-btn" type="button" title="Gallery" onClick={() => ui.set({ dialog: "gallery", toast: null })}>
             <Icon name="gallery" />
             {ui.galleryCount > 0 && <span className="badge">{ui.galleryCount}</span>}

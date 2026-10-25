@@ -11,6 +11,6 @@
     "erasableSyntaxOnly": true,
     "types": ["node"]
   },
-  "include": ["server"],
+  "include": ["server", "functions"],
   "exclude": ["server/**/*.test.ts"]
 }
