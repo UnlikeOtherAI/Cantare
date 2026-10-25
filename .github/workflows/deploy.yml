@@ -28,9 +28,9 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
-      # Deploys dist/ plus the Pages Functions in functions/ (the /api routes).
-      - uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=cantare --branch=main --commit-dirty=true
+      # Deploys dist/ plus the Pages Functions in functions/ (the /api routes). Wrangler runs
+      # through npx: installing it with pnpm 11 fails on its unapproved build scripts.
+      - run: npx --yes wrangler@4.149.0 pages deploy dist --project-name=cantare --branch=main --commit-dirty=true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
