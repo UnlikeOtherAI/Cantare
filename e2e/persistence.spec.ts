@@ -62,8 +62,6 @@ test("colour and artwork survive a reload", async ({ page }) => {
 });
 
 test("a saved setup comes back after changes and a reload", async ({ page }) => {
-  // Two full loads plus a save and an apply: on a GPU-less CI runner this outlasts one test's budget.
-  test.slow();
   await page.goto("/");
   await waitForStage(page);
   await page.getByRole("button", { name: "Try a sample" }).click();
@@ -88,18 +86,23 @@ test("a saved setup comes back after changes and a reload", async ({ page }) => 
   await waitForStage(page);
   await expect(page.locator(".doc__name")).toHaveText("Untitled scene");
 
-  await menu(page, "Setups…");
-  await dialog.getByRole("button", { name: /Gold IPA/ }).click();
-  await dialog.getByRole("button", { name: "Apply setup" }).click();
-  await expect(dialog).toHaveCount(0);
-  await expect(page.locator(".doc__name")).toHaveText("Gold IPA");
-  await expectBodyColour(page, "Classic gold");
-  await expectSampleArtwork(page);
+  const apply = async () => {
+    await menu(page, "Setups…");
+    await dialog.getByRole("button", { name: /Gold IPA/ }).click();
+    await dialog.getByRole("button", { name: "Apply setup" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator(".doc__name")).toHaveText("Gold IPA");
+  };
 
-  // Applying is one undo step.
+  // Applying is one undo step. Undo straight away: the toast hides after five seconds.
+  await apply();
   await page.locator(".toast").getByRole("button", { name: "Undo" }).click();
   await expect(page.locator(".doc__name")).toHaveText("Untitled scene");
   await expectBodyColour(page, "Classic silver");
+
+  await apply();
+  await expectBodyColour(page, "Classic gold");
+  await expectSampleArtwork(page);
 });
 
 test("setups can be renamed and deleted", async ({ page }) => {

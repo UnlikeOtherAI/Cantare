@@ -64,6 +64,27 @@ function Generate() {
     return () => clearInterval(timer);
   }, [generation]);
 
+  // Not offered yet where the server has no image service behind it.
+  if (generationAvailable === false) {
+    return (
+      <Group>
+        <div className="soon">
+          <span className="soon__badge">Coming soon</span>
+          <h3 className="soon__title">AI-generated backgrounds</h3>
+          <p className="soon__text">Describe a scene and get a matching backdrop for your can. For now, upload your own photo or use a colour.</p>
+          <div className="soon__actions">
+            <button className="btn btn--sm" type="button" onClick={() => setUi({ backgroundSource: "upload" })}>
+              Upload a photo
+            </button>
+            <button className="btn btn--sm" type="button" onClick={() => setUi({ backgroundSource: "colour" })}>
+              Use a colour
+            </button>
+          </div>
+        </div>
+      </Group>
+    );
+  }
+
   const shape = backgroundShape(exportAspect);
   return (
     <Group>
@@ -121,11 +142,6 @@ function Generate() {
         <button className="btn btn--block" type="button" disabled>
           Offline — generation needs a connection
         </button>
-      ) : generationAvailable === false ? (
-        <p className="help help--note">
-          <Icon name="info" />
-          <span>Background generation isn't set up on this server yet. Upload a photo or use a colour meanwhile.</span>
-        </p>
       ) : (
         <button className="btn btn--primary btn--block" type="button" disabled={prompt.trim().length < 3} onClick={startGeneration}>
           <Icon name="sparkle" className="btn__icon" />

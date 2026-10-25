@@ -276,6 +276,11 @@ svg use, .icon-btn svg, .rail__item svg, .toolstrip__item svg, .seg__item svg, .
 .help { margin: 0; color: var(--c-text-3); font-size: var(--t-12); line-height: 16px; }
 .help--note { display: flex; gap: var(--s-3); align-items: flex-start; padding: var(--s-4) var(--s-5); border-radius: var(--r-3); background: var(--c-bg-2); color: var(--c-text-2); }
 .help--note svg { flex: none; margin-top: 1px; color: var(--c-text-3); }
+.soon { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-3); padding: var(--s-5); border: 1px dashed var(--c-line-2); border-radius: var(--r-3); background: var(--c-bg-2); }
+.soon__badge { padding: 2px var(--s-3); border-radius: 999px; background: var(--c-accent-soft); color: var(--c-accent); font-size: var(--t-11); font-weight: var(--t-weight-semibold); letter-spacing: 0.04em; text-transform: uppercase; }
+.soon__title { margin: 0; font-size: var(--t-14); font-weight: var(--t-weight-semibold); color: var(--c-text-1); }
+.soon__text { margin: 0; color: var(--c-text-2); font-size: var(--t-12); line-height: 1.5; }
+.soon__actions { display: flex; flex-wrap: wrap; gap: var(--s-3); margin-top: var(--s-2); }
 .help--centre { text-align: center; }
 .row-actions { display: flex; gap: var(--s-4); }
 .field { display: flex; flex-direction: column; gap: var(--s-3); }
