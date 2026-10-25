@@ -25,7 +25,7 @@ import { LightPanel } from "./panels/LightPanel";
 import { ScenePanel } from "./panels/ScenePanel";
 import { WaterPanel } from "./panels/WaterPanel";
 import { PanelHead } from "./controls";
-import { SceneMenu } from "./SceneMenu";
+import { REPO_URL, SceneMenu } from "./SceneMenu";
 import { SetupsDialog } from "./SetupsDialog";
 import { getStage, Stage } from "./Viewport";
 
@@ -161,6 +161,9 @@ export function App() {
           <SceneMenu format={formatTitle(format)} />
         </div>
         <div className="topbar__right">
+          <a className="icon-btn topbar__github" href={REPO_URL} target="_blank" rel="noopener noreferrer" title="Source on GitHub" aria-label="Source on GitHub">
+            <Icon name="github" />
+          </a>
           <div className="btn-group" role="group" aria-label="History">
             <button className="icon-btn" type="button" title="Undo (⌘Z)" disabled={!past.length} onClick={undo}>
               <Icon name="undo" />

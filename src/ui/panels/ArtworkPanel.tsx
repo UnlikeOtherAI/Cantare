@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { demoArtwork } from "../../engine/demoArtwork";
+import { rememberArtworkMode } from "../../platform/persistence";
 import type { ArtworkFit, ArtworkMode } from "../../engine/settings";
 import { useEditor } from "../../state/editor";
 import { useUi } from "../../state/ui";
@@ -48,7 +49,10 @@ export function ArtworkPanel() {
         label="Decoration type"
         options={MODES.map(({ value, label }) => ({ value, label }))}
         value={artwork.mode}
-        onChange={(next) => patch("artwork", { mode: next, ...RESET })}
+        onChange={(next) => {
+          rememberArtworkMode(next);
+          patch("artwork", { mode: next, ...RESET });
+        }}
       />
       <p className="help">{mode.help}</p>
 

@@ -658,6 +658,7 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: var(--sh-f
   .doc__meta { display: none; }
   .doc { max-width: 44vw; }
   .btn-group .icon-btn:last-child { display: none; }     /* redo lives in a long-press of undo on phone */
+  .topbar__github { display: none; }                      /* in the scene menu instead */
   .btn--primary span { display: none; }                   /* export becomes an icon button */
   .btn--primary .btn__icon { width: 20px; height: 20px; }
   .topbar .btn--primary { width: 36px; height: 36px; padding: 0; }
@@ -691,6 +692,9 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: var(--sh-f
 .menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: var(--z-popover); min-width: 180px; padding: var(--s-2); display: flex; flex-direction: column; border-radius: var(--r-3); background: var(--c-bg-2); border: 1px solid var(--c-line-2); box-shadow: var(--sh-2); }
 .menu button { text-align: left; padding: var(--s-4) var(--s-5); border-radius: var(--r-2); color: var(--c-text-1); }
 .menu button:hover { background: var(--c-bg-3); }
+.menu a { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-4) var(--s-5); border-radius: var(--r-2); color: var(--c-text-1); text-decoration: none; }
+.menu a:hover { background: var(--c-bg-3); }
+.menu a svg { width: 16px; height: 16px; color: var(--c-text-2); }
 .asset { position: relative; }
 .asset__thumb img, .thumb img, .render__art img, .export__frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .export__frame img { object-fit: contain; background: repeating-conic-gradient(#1d1f23 0 25%, #16181b 0 50%) 0 0 / 16px 16px; }

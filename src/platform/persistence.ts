@@ -2,12 +2,13 @@
 // first render), image bytes live in IndexedDB keyed by content hash, and named setups sit beside
 // them. Nothing here leaves the device. Every storage call is guarded: private modes can throw.
 
-import { DEFAULT_SETTINGS, type CanSettings } from "../engine/settings";
+import { DEFAULT_SETTINGS, type ArtworkMode, type CanSettings } from "../engine/settings";
 import { useEditor } from "../state/editor";
 import { decodeScene, encodeScene, sanitizeImages, SCHEMA_VERSION, type ImageRefs, type SceneUi } from "../state/sceneSchema";
 import { useUi } from "../state/ui";
 
 const SCENE_KEY = "cantare.scene";
+const ARTWORK_MODE_KEY = "cantare.artworkMode";
 const DB = "cantare-state";
 const IMAGES = "images";
 const SETUPS = "setups";
@@ -49,6 +50,18 @@ function writeLocal(key: string, value: string) {
   } catch {
     // Private mode or quota: the scene simply isn't kept.
   }
+}
+
+/** Remembers the decoration type the user picked, so a new scene starts with it. */
+export function rememberArtworkMode(mode: ArtworkMode) {
+  writeLocal(ARTWORK_MODE_KEY, mode);
+}
+
+/** The default scene, with the decoration type the user picked last. */
+function startingSettings(): CanSettings {
+  const mode = readLocal(ARTWORK_MODE_KEY);
+  if (mode !== "printed" && mode !== "label" && mode !== "sticker") return DEFAULT_SETTINGS;
+  return { ...DEFAULT_SETTINGS, artwork: { ...DEFAULT_SETTINGS.artwork, mode } };
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -260,6 +273,7 @@ function startAutosave() {
 export async function startPersistence(waitMs = 1500): Promise<void> {
   const scene = decodeScene(readLocal(SCENE_KEY), uiDefaults());
   if (!scene) {
+    useEditor.setState({ settings: startingSettings(), past: [], future: [] });
     startAutosave();
     setTimeout(() => void collectGarbage(), 3000);
     return;
@@ -363,7 +377,8 @@ export async function applySetup(setup: Setup): Promise<Snapshot> {
 export function newScene(): Snapshot {
   const before = { ui: sceneUi() };
   const tool = useEditor.getState().settings.water.tool;
-  useEditor.getState().load({ ...DEFAULT_SETTINGS, water: { ...DEFAULT_SETTINGS.water, tool } });
+  const start = startingSettings();
+  useEditor.getState().load({ ...start, water: { ...start.water, tool } });
   useUi.getState().set(uiDefaults());
   return before;
 }
